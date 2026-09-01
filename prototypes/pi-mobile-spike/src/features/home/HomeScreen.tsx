@@ -14,9 +14,9 @@ import {
 
 import { IconButton, PrimaryButton } from '../../components/controls';
 import { color, radius, space } from '../../design/tokens';
-import type { Meal, MealType } from '../../domain/meal';
+import type { DailyGoals, Meal, MealType } from '../../domain/meal';
 import { totalsFor } from '../../domain/meal';
-import { formatNumber, formatTime, t, type CopyKey } from '../../i18n';
+import { formatDay, formatNumber, formatTime, t, type CopyKey } from '../../i18n';
 
 const typeIcon: Record<MealType, keyof typeof Ionicons.glyphMap> = {
   breakfast: 'sunny-outline',
@@ -27,7 +27,13 @@ const typeIcon: Record<MealType, keyof typeof Ionicons.glyphMap> = {
 
 export function HomeScreen(props: {
   meals: Meal[];
+  goals: DailyGoals;
+  day: number;
+  canGoNext: boolean;
   onCapture: () => void;
+  onOpen: (meal: Meal) => void;
+  onPreviousDay: () => void;
+  onNextDay: () => void;
   onRetry: (meal: Meal) => void;
   onAnswer: (meal: Meal, answer: string) => void;
   onSettings: () => void;
@@ -43,21 +49,40 @@ export function HomeScreen(props: {
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.header}>
-            <View>
+            <View style={styles.dayHeader}>
               <Text style={styles.eyebrow}>{t('appName')}</Text>
-              <Text style={styles.heading}>{t('today')}</Text>
+              <View style={styles.dayNavigation}>
+                <IconButton icon="chevron-back" label={t('previousDay')} onPress={props.onPreviousDay} />
+                <Text style={styles.heading}>{formatDay(props.day)}</Text>
+                <IconButton
+                  disabled={!props.canGoNext}
+                  icon="chevron-forward"
+                  label={t('nextDay')}
+                  onPress={props.onNextDay}
+                />
+              </View>
             </View>
             <IconButton icon="settings-outline" label={t('settings')} onPress={props.onSettings} />
           </View>
 
           <View style={styles.summary} accessibilityLabel={t('calories')}>
             <Text style={styles.calorieLine}>
-              {formatNumber(totals.calories)} <Text style={styles.unit}>{t('kcal')}</Text>
+              {formatNumber(totals.calories)}
+              {props.goals.calories ? ` / ${formatNumber(props.goals.calories)}` : ''}{' '}
+              <Text style={styles.unit}>{t('kcal')}</Text>
             </Text>
+            {props.goals.calories && (
+              <View style={styles.goalTrack}>
+                <View style={[
+                  styles.goalFill,
+                  { width: `${Math.min(100, totals.calories / props.goals.calories * 100)}%` },
+                ]} />
+              </View>
+            )}
             <View style={styles.macros}>
-              <Macro name={t('protein')} value={totals.protein} />
-              <Macro name={t('carbs')} value={totals.carbs} />
-              <Macro name={t('fat')} value={totals.fat} />
+              <Macro goal={props.goals.protein} name={t('protein')} value={totals.protein} />
+              <Macro goal={props.goals.carbs} name={t('carbs')} value={totals.carbs} />
+              <Macro goal={props.goals.fat} name={t('fat')} value={totals.fat} />
             </View>
           </View>
 
@@ -78,8 +103,8 @@ export function HomeScreen(props: {
               <View style={styles.emptyIcon}>
                 <Ionicons name="restaurant-outline" size={28} color={color.muted} />
               </View>
-              <Text style={styles.emptyTitle}>{t('emptyTitle')}</Text>
-              <Text style={styles.emptyBody}>{t('emptyBody')}</Text>
+              <Text style={styles.emptyTitle}>{t(props.canGoNext ? 'emptyPastTitle' : 'emptyTitle')}</Text>
+              <Text style={styles.emptyBody}>{t(props.canGoNext ? 'emptyPastBody' : 'emptyBody')}</Text>
             </View>
           ) : (
             <View>
@@ -88,6 +113,7 @@ export function HomeScreen(props: {
                   key={meal.id}
                   meal={meal}
                   last={index === props.meals.length - 1}
+                  onOpen={() => props.onOpen(meal)}
                   onRetry={() => props.onRetry(meal)}
                 />
               ))}
@@ -103,17 +129,34 @@ export function HomeScreen(props: {
   );
 }
 
-function Macro(props: { name: string; value: number }) {
+function Macro(props: { name: string; value: number; goal?: number }) {
   return (
     <View style={styles.macro}>
-      <Text style={styles.macroValue}>{formatNumber(props.value)} g</Text>
+      <Text style={styles.macroValue}>
+        {formatNumber(props.value)}{props.goal ? ` / ${formatNumber(props.goal)}` : ''} {t('grams')}
+      </Text>
       <Text style={styles.macroName}>{props.name}</Text>
     </View>
   );
 }
 
-function Clarification(props: { meal: Meal; onAnswer: (answer: string) => void }) {
+function Clarification(props: { meal: Meal; onAnswer: (answer: string) => void | Promise<void> }) {
   const [answer, setAnswer] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const submit = async () => {
+    if (!answer.trim() || busy) return;
+    setBusy(true);
+    setError(false);
+    try {
+      await props.onAnswer(answer.trim());
+      setAnswer('');
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <View style={styles.clarification}>
       <View style={styles.clarificationLabel}>
@@ -130,27 +173,29 @@ function Clarification(props: { meal: Meal; onAnswer: (answer: string) => void }
           returnKeyType="send"
           style={styles.answerInput}
           value={answer}
-          onSubmitEditing={() => answer.trim() && props.onAnswer(answer.trim())}
+          editable={!busy}
+          onSubmitEditing={submit}
         />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('answer')}
-          disabled={!answer.trim()}
-          onPress={() => props.onAnswer(answer.trim())}
+          disabled={!answer.trim() || busy}
+          onPress={submit}
           style={({ pressed }) => [
             styles.answerButton,
-            !answer.trim() && styles.answerDisabled,
+            (!answer.trim() || busy) && styles.answerDisabled,
             pressed && styles.answerPressed,
           ]}
         >
-          <Ionicons name="arrow-up" size={21} color={color.surface} />
+          <Ionicons name={busy ? 'hourglass-outline' : 'arrow-up'} size={21} color={color.surface} />
         </Pressable>
       </View>
+      {error && <Text accessibilityRole="alert" style={styles.clarificationError}>{t('correctionError')}</Text>}
     </View>
   );
 }
 
-function MealRow(props: { meal: Meal; last: boolean; onRetry: () => void }) {
+function MealRow(props: { meal: Meal; last: boolean; onOpen: () => void; onRetry: () => void }) {
   const pulse = useRef(new Animated.Value(0.35)).current;
   const isWorking = props.meal.status === 'queued' || props.meal.status === 'analyzing';
 
@@ -180,7 +225,11 @@ function MealRow(props: { meal: Meal; last: boolean; onRetry: () => void }) {
               : undefined;
 
   return (
-    <View style={[styles.mealRow, !props.last && styles.mealDivider]}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={props.onOpen}
+      style={({ pressed }) => [styles.mealRow, !props.last && styles.mealDivider, pressed && styles.mealPressed]}
+    >
       <View style={styles.mealIcon}>
         <Ionicons name={type ? typeIcon[type] : 'restaurant-outline'} size={22} color={color.ink} />
       </View>
@@ -217,7 +266,7 @@ function MealRow(props: { meal: Meal; last: boolean; onRetry: () => void }) {
           </Pressable>
         )}
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -225,12 +274,16 @@ const styles = StyleSheet.create({
   safeArea: { backgroundColor: color.canvas, flex: 1 },
   screen: { flex: 1 },
   content: { paddingBottom: 124, paddingHorizontal: space.lg, paddingTop: space.md },
-  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  header: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' },
+  dayHeader: { flex: 1 },
+  dayNavigation: { alignItems: 'center', flexDirection: 'row', marginLeft: -14, marginTop: -4 },
   eyebrow: { color: color.action, fontSize: 13, fontWeight: '700', letterSpacing: 0.3 },
   heading: { color: color.ink, fontSize: 29, fontWeight: '700', letterSpacing: -0.7, marginTop: 2 },
   summary: { marginTop: space.xl },
   calorieLine: { color: color.ink, fontSize: 23, fontWeight: '700', letterSpacing: -0.4 },
   unit: { color: color.muted, fontSize: 15, fontWeight: '600' },
+  goalTrack: { backgroundColor: color.line, borderRadius: 2, height: 3, marginTop: 10, overflow: 'hidden' },
+  goalFill: { backgroundColor: color.action, borderRadius: 2, height: 3 },
   macros: { flexDirection: 'row', gap: space.xl, marginTop: space.md },
   macro: { gap: 2 },
   macroValue: { color: color.ink, fontSize: 14, fontWeight: '600' },
@@ -260,6 +313,7 @@ const styles = StyleSheet.create({
   },
   answerDisabled: { opacity: 0.35 },
   answerPressed: { backgroundColor: color.actionPressed, transform: [{ scale: 0.95 }] },
+  clarificationError: { color: color.error, fontSize: 12, marginTop: space.sm },
   sectionHeading: { alignItems: 'center', flexDirection: 'row', gap: 8, marginTop: space.xl },
   sectionTitle: { color: color.ink, fontSize: 18, fontWeight: '700' },
   count: { color: color.muted, fontSize: 13, fontWeight: '600' },
@@ -271,6 +325,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: color.ink, fontSize: 18, fontWeight: '700', marginTop: space.md },
   emptyBody: { color: color.muted, fontSize: 15, marginTop: 5, textAlign: 'center' },
   mealRow: { flexDirection: 'row', gap: 14, paddingVertical: 18 },
+  mealPressed: { opacity: 0.68 },
   mealDivider: { borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth },
   mealIcon: {
     alignItems: 'center', backgroundColor: color.surface, borderRadius: radius.round,

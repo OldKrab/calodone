@@ -30,6 +30,15 @@ export type Meal = {
   error?: string;
 };
 
+export type DailyGoals = {
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+};
+
+export const emptyGoals: DailyGoals = {};
+
 export function emptyTotals(): NutritionTotals {
   return { calories: 0, protein: 0, carbs: 0, fat: 0 };
 }
@@ -55,9 +64,27 @@ export function parseMealAnalysis(text: string): MealAnalysis {
     !['breakfast', 'lunch', 'dinner', 'snack'].includes(value.mealType ?? '') ||
     !Array.isArray(value.items) ||
     !value.totals ||
-    typeof value.totals.calories !== 'number'
+    !validTotals(value.totals) ||
+    !value.items.every((item) => (
+      typeof item?.name === 'string' &&
+      typeof item?.quantity === 'string' &&
+      validTotals(item)
+    )) ||
+    (value.clarification !== undefined && (
+      typeof value.clarification?.question !== 'string' ||
+      !validNumber(value.clarification?.impactCalories)
+    ))
   ) {
     throw new Error('The model returned an invalid meal result');
   }
   return value as MealAnalysis;
+}
+
+function validTotals(value: Partial<NutritionTotals>): boolean {
+  return validNumber(value.calories) && validNumber(value.protein) &&
+    validNumber(value.carbs) && validNumber(value.fat);
+}
+
+function validNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }

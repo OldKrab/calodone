@@ -1,0 +1,4 @@
+<resources>
+  <string name="calodone_widget_label">CaloDone</string>
+  <string name="calodone_widget_description">Открыть камеру для еды</string>
+</resources>

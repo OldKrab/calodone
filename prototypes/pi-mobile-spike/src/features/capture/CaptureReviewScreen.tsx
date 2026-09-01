@@ -18,7 +18,7 @@ import {
 import { IconButton, PrimaryButton } from '../../components/controls';
 import { color, motion, radius, space } from '../../design/tokens';
 import type { MealPhoto } from '../../domain/meal';
-import { t } from '../../i18n';
+import { formatPhotoCount, t } from '../../i18n';
 
 export function CaptureReviewScreen(props: {
   photos: MealPhoto[];
@@ -64,7 +64,7 @@ export function CaptureReviewScreen(props: {
         ]}>
           <View style={styles.header}>
             <IconButton icon="close" label={t('close')} onPress={props.onCancel} />
-            <Text style={styles.photoCount}>{t('photoCount', { count: props.photos.length })}</Text>
+            <Text style={styles.photoCount}>{formatPhotoCount(props.photos.length)}</Text>
             <View style={styles.headerSpacer} />
           </View>
 

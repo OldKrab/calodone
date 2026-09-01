@@ -1,26 +1,41 @@
 import { Ionicons } from '@expo/vector-icons';
 import { File } from 'expo-file-system';
+import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Linking, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
 import { isSignedIn, signInWithBrowser, signOut } from './src/ai/piClient';
-import { IconButton, PrimaryButton } from './src/components/controls';
+import { PrimaryButton } from './src/components/controls';
 import {
   createMeal,
+  deleteMeal,
   finalizeExpiredClarifications,
+  getDailyGoals,
   initializeMeals,
   listMeals,
+  queueMealRetry,
+  saveDailyGoals,
+  updateMeal,
 } from './src/data/mealRepository';
-import { color, radius, space } from './src/design/tokens';
-import type { Meal, MealPhoto } from './src/domain/meal';
+import { color, space } from './src/design/tokens';
+import type { DailyGoals, Meal, MealAnalysis, MealPhoto } from './src/domain/meal';
 import { CaptureReviewScreen } from './src/features/capture/CaptureReviewScreen';
 import { CaptureScreen } from './src/features/capture/CaptureScreen';
 import { HomeScreen } from './src/features/home/HomeScreen';
+import { MealDetailScreen } from './src/features/meal/MealDetailScreen';
+import { SettingsScreen } from './src/features/settings/SettingsScreen';
 import { t } from './src/i18n';
-import { answerMealClarification, prepareMealNotifications, processMeal } from './src/services/mealProcessor';
+import { registerMealBackgroundTask } from './src/services/backgroundMeals';
+import {
+  answerMealClarification,
+  correctSavedMeal,
+  prepareMealNotifications,
+  processMeal,
+  processPendingMeals,
+} from './src/services/mealProcessor';
 
-type Screen = 'home' | 'camera' | 'review' | 'settings';
+type Screen = 'home' | 'camera' | 'review' | 'settings' | 'detail';
 
 export default function App() {
   const [ready, setReady] = useState(false);
@@ -29,15 +44,65 @@ export default function App() {
   const [connectionError, setConnectionError] = useState('');
   const [screen, setScreen] = useState<Screen>('home');
   const [meals, setMeals] = useState<Meal[]>([]);
+  const [goals, setGoals] = useState<DailyGoals>({});
+  const [selectedDay, setSelectedDay] = useState(startOfDay(Date.now()));
+  const [selectedMealId, setSelectedMealId] = useState<string>();
   const [photos, setPhotos] = useState<MealPhoto[]>([]);
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [savingGoals, setSavingGoals] = useState(false);
   const [captureError, setCaptureError] = useState('');
 
   const refresh = useCallback(async () => {
     await finalizeExpiredClarifications();
-    setMeals(await listMeals());
+    const [nextMeals, nextGoals] = await Promise.all([listMeals(), getDailyGoals()]);
+    setMeals(nextMeals);
+    setGoals(nextGoals);
   }, []);
+
+  const openMeal = useCallback((mealId: string) => {
+    setSelectedMealId(mealId);
+    setScreen('detail');
+  }, []);
+
+  useEffect(() => {
+    const routeUrl = (url: string | null) => {
+      if (!url) return;
+      try {
+        const parsed = new URL(url);
+        if (parsed.protocol === 'calodone:' && parsed.hostname === 'capture') setScreen('camera');
+      } catch {
+        // Ignore unrelated or malformed deep links.
+      }
+    };
+    void Linking.getInitialURL().then(routeUrl);
+    const subscription = Linking.addEventListener('url', ({ url }) => routeUrl(url));
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    const routeNotification = async (response: Notifications.NotificationResponse | null) => {
+      if (!response) return;
+      const mealId = response.notification.request.content.data?.mealId;
+      if (typeof mealId !== 'string') return;
+      if (response.actionIdentifier === 'answer' && response.userText?.trim()) {
+        try {
+          await answerMealClarification(mealId, response.userText.trim());
+          await refresh();
+        } catch {
+          // The relevant meal opens below so the user can retry in context.
+        }
+      }
+      openMeal(mealId);
+    };
+    void Notifications.getLastNotificationResponseAsync().then(async (response) => {
+      await routeNotification(response);
+      if (response) await Notifications.clearLastNotificationResponseAsync();
+    });
+    const subscription = Notifications.addNotificationResponseReceivedListener(routeNotification);
+    return () => subscription.remove();
+  }, [openMeal, refresh]);
 
   useEffect(() => {
     void (async () => {
@@ -46,15 +111,22 @@ export default function App() {
       setAuthenticated(signedIn);
       await refresh();
       setReady(true);
-
-      if (signedIn) {
-        const pending = (await listMeals()).filter(
-          (meal) => meal.status === 'queued' || meal.status === 'analyzing',
-        );
-        for (const meal of pending) void processMeal(meal.id).finally(refresh);
+      try {
+        await registerMealBackgroundTask();
+      } catch {
+        // Foreground processing still works when a platform refuses background registration.
       }
+      if (signedIn) await processPendingMeals();
+      await refresh();
     })().catch(() => setReady(true));
   }, [refresh]);
+
+  const dayMeals = useMemo(() => {
+    const end = nextDay(selectedDay);
+    return meals.filter((meal) => meal.capturedAt >= selectedDay && meal.capturedAt < end);
+  }, [meals, selectedDay]);
+  const selectedMeal = meals.find((meal) => meal.id === selectedMealId);
+  const canGoNext = selectedDay < startOfDay(Date.now());
 
   const connect = async () => {
     setConnecting(true);
@@ -62,6 +134,8 @@ export default function App() {
     try {
       await signInWithBrowser({ onEvent: () => undefined });
       setAuthenticated(true);
+      await processPendingMeals();
+      await refresh();
     } catch {
       setConnectionError(t('connectionError'));
     } finally {
@@ -117,6 +191,7 @@ export default function App() {
       });
       setPhotos([]);
       setNote('');
+      setSelectedDay(startOfDay(Date.now()));
       setScreen('home');
       await refresh();
       void prepareMealNotifications();
@@ -128,14 +203,51 @@ export default function App() {
     }
   };
 
-  const retry = (meal: Meal) => {
+  const retry = async (meal: Meal) => {
+    await queueMealRetry(meal.id);
+    await refresh();
     void processMeal(meal.id).finally(refresh);
-    void refresh();
   };
 
-  const answer = (meal: Meal, value: string) => {
-    void answerMealClarification(meal.id, value).finally(refresh);
-    void refresh();
+  const answer = async (meal: Meal, value: string) => {
+    await answerMealClarification(meal.id, value);
+    await refresh();
+  };
+
+  const correct = async (value: string) => {
+    if (!selectedMeal) return;
+    setCorrecting(true);
+    try {
+      await correctSavedMeal(selectedMeal.id, value);
+      await refresh();
+    } finally {
+      setCorrecting(false);
+    }
+  };
+
+  const saveMeal = async (capturedAt: number, analysis: MealAnalysis) => {
+    if (!selectedMeal) return;
+    await updateMeal(selectedMeal.id, { capturedAt, analysis });
+    await refresh();
+  };
+
+  const removeMeal = async () => {
+    if (!selectedMeal) return;
+    selectedMeal.photos.forEach(deletePhoto);
+    await deleteMeal(selectedMeal.id);
+    setSelectedMealId(undefined);
+    setScreen('home');
+    await refresh();
+  };
+
+  const persistGoals = async (nextGoals: DailyGoals) => {
+    setSavingGoals(true);
+    try {
+      await saveDailyGoals(nextGoals);
+      await refresh();
+    } finally {
+      setSavingGoals(false);
+    }
   };
 
   const disconnect = async () => {
@@ -176,16 +288,46 @@ export default function App() {
   }
 
   if (screen === 'settings') {
-    return <SettingsScreen onBack={() => setScreen('home')} onSignOut={disconnect} />;
+    return (
+      <SettingsScreen
+        goals={goals}
+        saving={savingGoals}
+        onBack={() => setScreen('home')}
+        onSaveGoals={persistGoals}
+        onSignOut={disconnect}
+      />
+    );
+  }
+
+  if (screen === 'detail' && selectedMeal) {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <MealDetailScreen
+          correcting={correcting}
+          meal={selectedMeal}
+          onBack={() => setScreen('home')}
+          onCorrect={correct}
+          onDelete={removeMeal}
+          onSave={saveMeal}
+        />
+      </>
+    );
   }
 
   return (
     <>
       <StatusBar style="dark" />
       <HomeScreen
-        meals={meals}
+        canGoNext={canGoNext}
+        day={selectedDay}
+        goals={goals}
+        meals={dayMeals}
         onAnswer={answer}
         onCapture={openCapture}
+        onNextDay={() => canGoNext && setSelectedDay(nextDay(selectedDay))}
+        onOpen={(meal) => openMeal(meal.id)}
+        onPreviousDay={() => setSelectedDay(previousDay(selectedDay))}
         onRetry={retry}
         onSettings={() => setScreen('settings')}
       />
@@ -211,27 +353,22 @@ function ConnectScreen(props: { busy: boolean; error: string; onConnect: () => v
   );
 }
 
-function SettingsScreen(props: { onBack: () => void; onSignOut: () => void }) {
-  return (
-    <SafeAreaView style={styles.settings}>
-      <StatusBar style="dark" />
-      <View style={styles.settingsHeader}>
-        <IconButton icon="arrow-back" label={t('back')} onPress={props.onBack} />
-        <Text style={styles.settingsTitle}>{t('settings')}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
-      <View style={styles.settingsBody}>
-        <View style={styles.connectionRow}>
-          <View style={styles.connectionIcon}><Ionicons name="checkmark" size={18} color={color.success} /></View>
-          <Text style={styles.connectionText}>{t('signedInAs')}</Text>
-        </View>
-        <Text style={styles.privacy}>{t('settingsBody')}</Text>
-        <Pressable accessibilityRole="button" onPress={props.onSignOut} hitSlop={10}>
-          <Text style={styles.signOut}>{t('signOut')}</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
-  );
+function startOfDay(timestamp: number): number {
+  const date = new Date(timestamp);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function nextDay(timestamp: number): number {
+  const date = new Date(timestamp);
+  date.setDate(date.getDate() + 1);
+  return startOfDay(date.getTime());
+}
+
+function previousDay(timestamp: number): number {
+  const date = new Date(timestamp);
+  date.setDate(date.getDate() - 1);
+  return startOfDay(date.getTime());
 }
 
 const styles = StyleSheet.create({
@@ -244,14 +381,4 @@ const styles = StyleSheet.create({
   connectBody: { color: color.muted, fontSize: 16, lineHeight: 23, marginTop: space.md },
   connectAction: { gap: space.sm, marginBottom: space.xl, marginTop: space.xl },
   error: { color: color.error, fontSize: 13, textAlign: 'center' },
-  settings: { backgroundColor: color.canvas, flex: 1 },
-  settingsHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingTop: space.sm },
-  settingsTitle: { color: color.ink, fontSize: 17, fontWeight: '700' },
-  headerSpacer: { width: 48 },
-  settingsBody: { paddingHorizontal: space.lg, paddingTop: space.xl },
-  connectionRow: { alignItems: 'center', flexDirection: 'row', gap: 12 },
-  connectionIcon: { alignItems: 'center', backgroundColor: color.surface, borderRadius: radius.round, height: 38, justifyContent: 'center', width: 38 },
-  connectionText: { color: color.ink, fontSize: 16, fontWeight: '600' },
-  privacy: { color: color.muted, fontSize: 14, lineHeight: 21, marginTop: space.lg, maxWidth: 330 },
-  signOut: { color: color.error, fontSize: 15, fontWeight: '600', marginTop: space.xl },
 });

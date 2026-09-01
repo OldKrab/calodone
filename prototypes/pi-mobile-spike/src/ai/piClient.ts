@@ -196,3 +196,35 @@ Write all user-facing strings in ${input.language}. ${MEAL_RESULT_SHAPE}`,
   }
   return { model: model.id, text: contentText(response.content) };
 }
+
+export async function correctMealAnalysis(input: {
+  previousJson: string;
+  correction: string;
+  language: 'English' | 'Russian';
+}): Promise<{ model: string; text: string }> {
+  const correction = input.correction.trim();
+  if (!correction) throw new Error('A correction is required');
+  const model = textModel();
+  const response = await models.complete(
+    model,
+    {
+      systemPrompt: `Apply the user's explicit correction to an existing meal estimate.
+The correction overrides earlier inference. Preserve unaffected details, recalculate every affected item and total, and do not ask a follow-up question.
+Write all user-facing strings in ${input.language}. ${MEAL_RESULT_SHAPE}`,
+      messages: [{
+        role: 'user',
+        content: [{
+          type: 'text',
+          text: `Existing meal JSON:\n${input.previousJson}\n\nCorrection: ${correction}`,
+        }],
+        timestamp: Date.now(),
+      }],
+    },
+    { fetch: expoFetch as typeof globalThis.fetch, transport: 'sse' },
+  );
+
+  if (response.stopReason === 'error') {
+    throw new Error(response.errorMessage ?? 'Unknown Pi request error');
+  }
+  return { model: model.id, text: contentText(response.content) };
+}

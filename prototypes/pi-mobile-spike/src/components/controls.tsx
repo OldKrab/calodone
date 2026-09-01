@@ -42,6 +42,7 @@ export function IconButton(props: {
   onPress: () => void;
   inverted?: boolean;
   selected?: boolean;
+  disabled?: boolean;
 }) {
   const foreground = props.inverted ? color.cameraText : color.ink;
   return (
@@ -49,12 +50,14 @@ export function IconButton(props: {
       accessibilityRole="button"
       accessibilityLabel={props.label}
       accessibilityState={{ selected: props.selected }}
+      disabled={props.disabled}
       hitSlop={8}
       onPress={props.onPress}
       style={({ pressed }) => [
         styles.iconButton,
         props.inverted && styles.iconButtonInverted,
         props.selected && styles.iconButtonSelected,
+        props.disabled && styles.disabled,
         pressed && styles.iconPressed,
       ]}
     >

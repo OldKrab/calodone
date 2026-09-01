@@ -1,6 +1,12 @@
 import { openDatabaseSync } from 'expo-sqlite';
 
-import type { Meal, MealAnalysis, MealPhoto, MealStatus } from '../domain/meal';
+import type {
+  DailyGoals,
+  Meal,
+  MealAnalysis,
+  MealPhoto,
+  MealStatus,
+} from '../domain/meal';
 
 const database = openDatabaseSync('calodone.db');
 
@@ -37,13 +43,25 @@ export async function initializeMeals(): Promise<void> {
       photos_json TEXT NOT NULL,
       analysis_json TEXT,
       error TEXT,
-      clarification_at INTEGER
+      clarification_at INTEGER,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS preferences (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS meals_captured_at ON meals(captured_at DESC);
   `);
   const columns = await database.getAllAsync<{ name: string }>('PRAGMA table_info(meals)');
   if (!columns.some((column) => column.name === 'clarification_at')) {
     await database.execAsync('ALTER TABLE meals ADD COLUMN clarification_at INTEGER;');
+  }
+  if (!columns.some((column) => column.name === 'attempts')) {
+    await database.execAsync('ALTER TABLE meals ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0;');
+  }
+  if (!columns.some((column) => column.name === 'next_attempt_at')) {
+    await database.execAsync('ALTER TABLE meals ADD COLUMN next_attempt_at INTEGER;');
   }
 }
 
@@ -83,13 +101,90 @@ export async function setMealStatus(id: string, status: MealStatus, error?: stri
   );
 }
 
+export async function queueMealRetry(id: string): Promise<void> {
+  await database.runAsync(
+    `UPDATE meals
+     SET status = 'queued', error = NULL, attempts = 0, next_attempt_at = NULL
+     WHERE id = ?`,
+    id,
+  );
+}
+
+export async function recordMealFailure(id: string, error: string): Promise<void> {
+  const row = await database.getFirstAsync<{ attempts: number }>(
+    'SELECT attempts FROM meals WHERE id = ?',
+    id,
+  );
+  const attempts = (row?.attempts ?? 0) + 1;
+  const terminal = attempts >= 5;
+  const retryDelay = Math.min(2 ** (attempts - 1) * 60_000, 6 * 60 * 60 * 1000);
+  await database.runAsync(
+    `UPDATE meals
+     SET status = ?, error = ?, attempts = ?, next_attempt_at = ?
+     WHERE id = ?`,
+    terminal ? 'failed' : 'queued',
+    error,
+    attempts,
+    terminal ? null : Date.now() + retryDelay,
+    id,
+  );
+}
+
+export async function listProcessableMeals(now = Date.now()): Promise<Meal[]> {
+  const rows = await database.getAllAsync<MealRow>(
+    `SELECT * FROM meals
+     WHERE status IN ('queued', 'analyzing')
+       AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+     ORDER BY captured_at ASC`,
+    now,
+  );
+  return rows.map(fromRow);
+}
+
 export async function saveMealAnalysis(id: string, analysis: MealAnalysis): Promise<void> {
   await database.runAsync(
-    'UPDATE meals SET status = ?, analysis_json = ?, error = NULL, clarification_at = ? WHERE id = ?',
+    `UPDATE meals
+     SET status = ?, analysis_json = ?, error = NULL, clarification_at = ?,
+         attempts = 0, next_attempt_at = NULL
+     WHERE id = ?`,
     analysis.clarification ? 'needs_input' : 'complete',
     JSON.stringify(analysis),
     analysis.clarification ? Date.now() : null,
     id,
+  );
+}
+
+export async function updateMeal(id: string, input: {
+  capturedAt: number;
+  analysis: MealAnalysis;
+}): Promise<void> {
+  await database.runAsync(
+    `UPDATE meals
+     SET captured_at = ?, status = 'complete', analysis_json = ?, error = NULL,
+         clarification_at = NULL
+     WHERE id = ?`,
+    input.capturedAt,
+    JSON.stringify({ ...input.analysis, clarification: undefined }),
+    id,
+  );
+}
+
+export async function deleteMeal(id: string): Promise<void> {
+  await database.runAsync('DELETE FROM meals WHERE id = ?', id);
+}
+
+export async function getDailyGoals(): Promise<DailyGoals> {
+  const row = await database.getFirstAsync<{ value: string }>(
+    `SELECT value FROM preferences WHERE key = 'daily_goals'`,
+  );
+  return row ? JSON.parse(row.value) as DailyGoals : {};
+}
+
+export async function saveDailyGoals(goals: DailyGoals): Promise<void> {
+  await database.runAsync(
+    `INSERT INTO preferences (key, value) VALUES ('daily_goals', ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    JSON.stringify(goals),
   );
 }
 

@@ -2,8 +2,15 @@ import { File } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 
-import { analyzeMealPhotos, refineMealAnalysis } from '../ai/piClient';
-import { getMeal, saveMealAnalysis, setMealStatus } from '../data/mealRepository';
+import { analyzeMealPhotos, correctMealAnalysis, refineMealAnalysis } from '../ai/piClient';
+import {
+  getMeal,
+  listProcessableMeals,
+  recordMealFailure,
+  saveMealAnalysis,
+  setMealStatus,
+} from '../data/mealRepository';
+import type { MealAnalysis } from '../domain/meal';
 import { parseMealAnalysis } from '../domain/meal';
 import { locale, t } from '../i18n';
 
@@ -25,20 +32,32 @@ export async function prepareMealNotifications(): Promise<void> {
       importance: Notifications.AndroidImportance.DEFAULT,
     });
   }
+  await Notifications.setNotificationCategoryAsync('meal-clarification', [{
+    identifier: 'answer',
+    buttonTitle: t('answer'),
+    options: { opensAppToForeground: true },
+    textInput: {
+      submitButtonTitle: t('answer'),
+      placeholder: t('answerPlaceholder'),
+    },
+  }]);
   const current = await Notifications.getPermissionsAsync();
   if (!current.granted && current.canAskAgain) {
     await Notifications.requestPermissionsAsync();
   }
 }
 
-async function notifyResult(needsInput: boolean): Promise<void> {
+async function notifyResult(mealId: string, analysis: MealAnalysis): Promise<void> {
   if (AppState.currentState === 'active') return;
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
+  const question = analysis.clarification?.question;
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: needsInput ? t('notificationQuestionTitle') : t('notificationReadyTitle'),
-      body: needsInput ? t('notificationQuestionBody') : t('notificationReadyBody'),
+      title: question ? t('notificationQuestionTitle') : t('notificationReadyTitle'),
+      body: question ?? t('notificationReadyBody'),
+      categoryIdentifier: question ? 'meal-clarification' : undefined,
+      data: { mealId },
     },
     trigger: null,
   });
@@ -74,12 +93,17 @@ export async function processMeal(id: string): Promise<void> {
     const analysis = parseMealAnalysis(result.text);
     await saveMealAnalysis(id, analysis);
     removePrivatePhotos(meal.photos.map((photo) => photo.uri));
-    await notifyResult(Boolean(analysis.clarification));
+    await notifyResult(id, analysis);
   } catch (error) {
-    await setMealStatus(id, 'failed', error instanceof Error ? error.message : String(error));
+    await recordMealFailure(id, error instanceof Error ? error.message : String(error));
   } finally {
     processing.delete(id);
   }
+}
+
+export async function processPendingMeals(): Promise<void> {
+  const meals = await listProcessableMeals();
+  for (const meal of meals) await processMeal(meal.id);
 }
 
 export async function answerMealClarification(id: string, answer: string): Promise<void> {
@@ -104,6 +128,26 @@ export async function answerMealClarification(id: string, answer: string): Promi
       'needs_input',
       error instanceof Error ? error.message : String(error),
     );
+    throw error;
+  }
+}
+
+export async function correctSavedMeal(id: string, correction: string): Promise<void> {
+  const meal = await getMeal(id);
+  if (!meal?.analysis) return;
+
+  await setMealStatus(id, 'analyzing');
+  try {
+    const result = await correctMealAnalysis({
+      previousJson: JSON.stringify(meal.analysis),
+      correction,
+      language: locale === 'ru' ? 'Russian' : 'English',
+    });
+    const analysis = parseMealAnalysis(result.text);
+    delete analysis.clarification;
+    await saveMealAnalysis(id, analysis);
+  } catch (error) {
+    await setMealStatus(id, meal.status, error instanceof Error ? error.message : String(error));
     throw error;
   }
 }
