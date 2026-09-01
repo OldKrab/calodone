@@ -1,0 +1,30 @@
+{
+  "name": "calodone-pi-mobile-spike",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@earendil-works/pi-ai": "^0.84.4",
+    "expo": "~57.0.18",
+    "expo-crypto": "~57.0.2",
+    "expo-file-system": "~57.0.6",
+    "expo-image-picker": "~57.0.14",
+    "expo-secure-store": "~57.0.2",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~6.0.3"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "check": "tsc --noEmit",
+    "bundle:android": "expo export --platform android --output-dir dist/android",
+    "bundle:ios": "expo export --platform ios --output-dir dist/ios"
+  },
+  "private": true
+}
