@@ -4,7 +4,6 @@ import * as ImagePicker from 'expo-image-picker';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -14,18 +13,22 @@ import {
   View,
 } from 'react-native';
 
-import { analyzeMealPhoto, isSignedIn, signInWithDeviceCode, signOut } from './src/ai/piClient';
+import {
+  analyzeMealPhoto,
+  isSignedIn,
+  sendTextPrompt,
+  signInWithBrowser,
+  signOut,
+} from './src/ai/piClient';
 import { checkPiMobileRuntime, type RuntimeCheck } from './src/ai/mobileRuntime';
 import { t } from './src/i18n';
-
-type DeviceCode = { code: string; url: string };
 
 export default function App() {
   const [busy, setBusy] = useState(false);
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [checks, setChecks] = useState<RuntimeCheck[]>([]);
   const [events, setEvents] = useState<string[]>([]);
-  const [deviceCode, setDeviceCode] = useState<DeviceCode | null>(null);
+  const [prompt, setPrompt] = useState(t('defaultPrompt'));
   const [note, setNote] = useState('');
   const [result, setResult] = useState<{ model: string; text: string } | null>(null);
 
@@ -55,15 +58,11 @@ export default function App() {
 
   const login = async () => {
     setBusy(true);
-    setDeviceCode(null);
     try {
-      await signInWithDeviceCode({
+      await signInWithBrowser({
         onEvent: (event) => {
-          if (event.type === 'device_code') {
-            const next = { code: event.userCode, url: event.verificationUri };
-            setDeviceCode(next);
-            log(t('deviceCode', next));
-            void Linking.openURL(event.verificationUri);
+          if (event.type === 'auth_url') {
+            log(t('browserOpened'));
           } else if (event.type === 'progress' || event.type === 'info') {
             log(event.message);
           } else {
@@ -72,8 +71,21 @@ export default function App() {
         },
       });
       setSignedIn(true);
-      setDeviceCode(null);
       log(t('signedIn'));
+    } catch (error) {
+      log(`${t('error')}: ${String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const askModel = async () => {
+    setBusy(true);
+    setResult(null);
+    try {
+      const response = await sendTextPrompt(prompt);
+      setResult(response);
+      log(`Text request completed with ${response.model}`);
     } catch (error) {
       log(`${t('error')}: ${String(error)}`);
     } finally {
@@ -183,12 +195,20 @@ export default function App() {
           disabled={busy || signedIn === null}
         />
 
-        {deviceCode && (
-          <Pressable style={styles.codePanel} onPress={() => Linking.openURL(deviceCode.url)}>
-            <Text style={styles.code}>{deviceCode.code}</Text>
-            <Text style={styles.link}>{t('openLogin')}</Text>
-          </Pressable>
-        )}
+        <TextInput
+          value={prompt}
+          onChangeText={setPrompt}
+          placeholder={t('promptPlaceholder')}
+          placeholderTextColor="#798079"
+          multiline
+          style={[styles.input, styles.promptInput]}
+        />
+        <ActionButton
+          label={t('askModel')}
+          onPress={askModel}
+          disabled={busy || !signedIn || !prompt.trim()}
+          primary
+        />
 
         <TextInput
           value={note}
@@ -201,7 +221,6 @@ export default function App() {
           label={t('takePhoto')}
           onPress={takePhoto}
           disabled={busy || !signedIn}
-          primary
         />
         <ActionButton
           label={t('choosePhoto')}
@@ -300,9 +319,6 @@ const styles = StyleSheet.create({
   pressedButton: { opacity: 0.72 },
   buttonText: { color: '#26382d', fontSize: 16, fontWeight: '700', textAlign: 'center' },
   primaryButtonText: { color: '#fffdf7' },
-  codePanel: { backgroundColor: '#fff8d8', borderRadius: 12, padding: 16, alignItems: 'center' },
-  code: { color: '#342d12', fontSize: 28, fontWeight: '800', letterSpacing: 2 },
-  link: { color: '#315e9b', marginTop: 4, textDecorationLine: 'underline' },
   input: {
     minHeight: 48,
     borderColor: '#b5b7ae',
@@ -313,6 +329,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
   },
+  promptInput: { minHeight: 92, textAlignVertical: 'top' },
   section: { borderTopColor: '#c8c7bd', borderTopWidth: 1, marginTop: 10, paddingTop: 14, gap: 7 },
   sectionTitle: { color: '#17251d', fontSize: 16, fontWeight: '800', marginBottom: 2 },
   body: { color: '#26382d', fontSize: 15, lineHeight: 22 },

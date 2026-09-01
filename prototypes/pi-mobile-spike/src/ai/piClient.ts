@@ -31,7 +31,7 @@ export async function isSignedIn(): Promise<boolean> {
   return Boolean(await models.checkAuth(PROVIDER_ID));
 }
 
-export async function signInWithDeviceCode(
+export async function signInWithBrowser(
   callbacks: LoginCallbacks,
 ): Promise<void> {
   await models.login(PROVIDER_ID, 'oauth', {
@@ -57,6 +57,49 @@ function imageModel() {
     .find((model) => model.input.includes('image'));
   if (!fallback) throw new Error('Pi did not expose a Codex model with image input');
   return fallback;
+}
+
+function textModel() {
+  for (const modelId of PREFERRED_IMAGE_MODELS) {
+    const model = models.getModel(PROVIDER_ID, modelId);
+    if (model?.input.includes('text')) return model;
+  }
+
+  const fallback = models
+    .getModels(PROVIDER_ID)
+    .find((model) => model.input.includes('text'));
+  if (!fallback) throw new Error('Pi did not expose a Codex model with text input');
+  return fallback;
+}
+
+export async function sendTextPrompt(
+  prompt: string,
+): Promise<{ model: string; text: string }> {
+  const text = prompt.trim();
+  if (!text) throw new Error('Enter a request first');
+  const model = textModel();
+  const response = await models.complete(
+    model,
+    {
+      systemPrompt: 'Answer the user directly and concisely.',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text }],
+          timestamp: Date.now(),
+        },
+      ],
+    },
+    {
+      fetch: expoFetch as typeof globalThis.fetch,
+      transport: 'sse',
+    },
+  );
+
+  if (response.stopReason === 'error') {
+    throw new Error(response.errorMessage ?? 'Unknown Pi request error');
+  }
+  return { model: model.id, text: contentText(response.content) };
 }
 
 export async function analyzeMealPhoto(input: {
