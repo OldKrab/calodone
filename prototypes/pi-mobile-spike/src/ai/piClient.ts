@@ -102,17 +102,35 @@ export async function sendTextPrompt(
   return { model: model.id, text: contentText(response.content) };
 }
 
-export async function analyzeMealPhoto(input: {
+export type ImageInput = {
   base64: string;
   mimeType: string;
+};
+
+const MEAL_RESULT_SHAPE = `Return only valid JSON with this exact shape:
+{
+  "title": string,
+  "mealType": "breakfast" | "lunch" | "dinner" | "snack",
+  "items": [{ "name": string, "quantity": string, "calories": number, "protein": number, "carbs": number, "fat": number }],
+  "totals": { "calories": number, "protein": number, "carbs": number, "fat": number },
+  "clarification"?: { "question": string, "impactCalories": number }
+}`;
+
+export async function analyzeMealPhotos(input: {
+  photos: ImageInput[];
   note?: string;
+  language: 'English' | 'Russian';
 }): Promise<{ model: string; text: string }> {
+  if (input.photos.length === 0) throw new Error('At least one meal photo is required');
   const model = imageModel();
   const response = await models.complete(
     model,
     {
-      systemPrompt:
-        'This is a transport compatibility test. Describe the visible meal briefly. Do not invent hidden ingredients or exact quantities.',
+      systemPrompt: `You estimate nutrition from meal photos for a calorie tracker.
+All supplied photos show the same meal, possibly from different angles. Recognize the whole meal and never double-count food repeated across photos.
+Use visible evidence and the user note. Estimate plausible portions without pretending certainty.
+Ask at most one clarification, only when resolving it could change calories by more than 100 kcal or 20%. Ask the single highest-impact question.
+Write all user-facing strings in ${input.language}. ${MEAL_RESULT_SHAPE}`,
       messages: [
         {
           role: 'user',
@@ -120,10 +138,14 @@ export async function analyzeMealPhoto(input: {
             {
               type: 'text',
               text: input.note?.trim()
-                ? `Describe this meal. User note: ${input.note.trim()}`
-                : 'Describe this meal.',
+                ? `Analyze this complete meal. User note: ${input.note.trim()}`
+                : 'Analyze this complete meal.',
             },
-            { type: 'image', data: input.base64, mimeType: input.mimeType },
+            ...input.photos.map((photo) => ({
+              type: 'image' as const,
+              data: photo.base64,
+              mimeType: photo.mimeType,
+            })),
           ],
           timestamp: Date.now(),
         },
@@ -141,5 +163,36 @@ export async function analyzeMealPhoto(input: {
     throw new Error(response.errorMessage ?? 'Unknown Pi request error');
   }
 
+  return { model: model.id, text: contentText(response.content) };
+}
+
+export async function refineMealAnalysis(input: {
+  previousJson: string;
+  question: string;
+  answer: string;
+  language: 'English' | 'Russian';
+}): Promise<{ model: string; text: string }> {
+  const model = textModel();
+  const response = await models.complete(
+    model,
+    {
+      systemPrompt: `Update an existing meal estimate using the user's answer.
+Preserve details unaffected by the answer and recalculate item and meal totals. Do not ask another question.
+Write all user-facing strings in ${input.language}. ${MEAL_RESULT_SHAPE}`,
+      messages: [{
+        role: 'user',
+        content: [{
+          type: 'text',
+          text: `Existing meal JSON:\n${input.previousJson}\n\nQuestion: ${input.question}\nAnswer: ${input.answer}`,
+        }],
+        timestamp: Date.now(),
+      }],
+    },
+    { fetch: expoFetch as typeof globalThis.fetch, transport: 'sse' },
+  );
+
+  if (response.stopReason === 'error') {
+    throw new Error(response.errorMessage ?? 'Unknown Pi request error');
+  }
   return { model: model.id, text: contentText(response.content) };
 }

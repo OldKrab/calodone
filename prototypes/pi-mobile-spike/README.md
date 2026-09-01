@@ -1,47 +1,34 @@
-# CaloDone Pi mobile compatibility spike
+# CaloDone Android app
 
-> THROWAWAY PROTOTYPE — this is evidence for an architecture decision, not production app code.
+This directory contains the first usable CaloDone vertical slice. It grew from the Pi mobile compatibility spike after browser-based ChatGPT login and Codex model requests were verified on a physical Android phone.
 
-Question: can an Android app open ChatGPT subscription login in the browser, receive OpenAI's fixed localhost callback, return to the app, and send Codex model requests without Hermes or a CaloDone backend?
+## Current flow
 
-The prototype intentionally uses the published `@earendil-works/pi-ai` package rather than Codex CLI or a CaloDone backend. It stores credentials through an injected `CredentialStore`, passes Expo's streaming `fetch` to inference requests, and deletes the temporary camera file after each request.
+1. Connect a ChatGPT account through browser OAuth.
+2. Tap **Add meal** to open CaloDone's embedded camera.
+3. Take one photo, optionally add another angle or a short note, then tap **Send**.
+4. Return immediately to the Today screen while CaloDone recognizes the complete meal.
+5. Answer one high-impact clarification if needed. Unanswered clarifications become **Estimated** after 24 hours.
 
-The first unchanged-package bundle failed because Metro rejects Pi's runtime-variable OAuth import. The current prototype therefore reuses Pi's model catalog, provider machinery, request transport, and credential refresh contract, but replaces its Node-oriented OAuth loader with an Android browser adapter matching Pi 0.84.4. The adapter runs a native TCP listener at `127.0.0.1:1455`, receives OpenAI's allow-listed callback, and serves a `calodone://oauth-complete` handoff page. A Metro resolver shim replaces Pi's optional Node environment/file credential lookup with an empty mobile context; actual credentials come from SecureStore.
+Captured photos stay in private app storage, never enter the gallery, and are deleted after successful analysis. Failed and interrupted jobs retain their private photos so they can be retried.
 
-## Run on Android
+The interface and formatting are localized in English and Russian. Provider authorization and multimodal transport remain isolated under `src/ai`; meal prompts, persistence, and processing live outside that boundary.
 
-This cannot run in Expo Go because the localhost callback uses a native TCP module. Connect a phone with USB debugging enabled, install Android Studio/SDK, then run:
+## Run and verify
+
+This cannot run in Expo Go because Codex OAuth uses a native localhost callback listener.
 
 ```sh
 npm install
+npm run check
 npm run android
 ```
 
-The command creates and installs an Expo development build. In the app:
+No emulator is required. `npm run android` can install a development build on a USB-connected Android phone.
 
-1. Run compatibility checks.
-2. Select **Sign in with ChatGPT**.
-3. Complete login in Chrome Custom Tabs. The localhost callback page should reopen CaloDone automatically; if Chrome blocks the automatic handoff, tap **Return to CaloDone** on that page.
-4. Send the prefilled text request and verify that a model response appears.
-5. Optionally take a meal photo and verify the image request too.
+## Current boundary
 
-## What counts as success
-
-- The Android development build starts without Node core-module shims.
-- The runtime checks all pass.
-- Browser login reaches the local callback and returns to the app.
-- Login survives an app restart.
-- Token refresh can write back through `SecureCredentialStore`.
-- A text request reaches a Codex model and renders its response.
-- A camera image reaches a Codex vision model and a streamed response completes.
-- The captured temporary file is deleted after success or failure.
-
-Static bundling alone is not a success verdict: login, credential refresh, and SSE parsing still require a device or simulator run.
-
-## Known prototype shortcuts
-
-- English and Russian UI strings are included, but the architecture is intentionally minimal.
-- The browser adapter mirrors Pi/OpenAI internals that are not documented as a general mobile API and may change upstream.
-- Android may keep Chrome Custom Tabs in the back stack after the app returns.
-- The system camera confirmation remains; CaloDone's actual one-tap capture UX should use an embedded camera view.
-- This tests only OpenAI Codex. A future shared AI library should keep provider-neutral interfaces and platform-specific auth/storage adapters in a separate package.
+- OpenAI Codex is the first provider.
+- Queued work resumes when the app next opens, but a durable immediate Android background worker is not implemented yet.
+- Home-screen capture widgets, meal correction, manual editing, goals, history navigation, and nutrition-database grounding are subsequent product slices.
+- The OAuth adapter follows Pi/OpenAI integration behavior that is not documented as a stable general mobile API and may require upstream maintenance.

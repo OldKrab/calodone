@@ -1,344 +1,257 @@
-import { StatusBar } from 'expo-status-bar';
+import { Ionicons } from '@expo/vector-icons';
 import { File } from 'expo-file-system';
-import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, Text, View } from 'react-native';
 
+import { isSignedIn, signInWithBrowser, signOut } from './src/ai/piClient';
+import { IconButton, PrimaryButton } from './src/components/controls';
 import {
-  analyzeMealPhoto,
-  isSignedIn,
-  sendTextPrompt,
-  signInWithBrowser,
-  signOut,
-} from './src/ai/piClient';
-import { checkPiMobileRuntime, type RuntimeCheck } from './src/ai/mobileRuntime';
+  createMeal,
+  finalizeExpiredClarifications,
+  initializeMeals,
+  listMeals,
+} from './src/data/mealRepository';
+import { color, radius, space } from './src/design/tokens';
+import type { Meal, MealPhoto } from './src/domain/meal';
+import { CaptureReviewScreen } from './src/features/capture/CaptureReviewScreen';
+import { CaptureScreen } from './src/features/capture/CaptureScreen';
+import { HomeScreen } from './src/features/home/HomeScreen';
 import { t } from './src/i18n';
+import { answerMealClarification, prepareMealNotifications, processMeal } from './src/services/mealProcessor';
+
+type Screen = 'home' | 'camera' | 'review' | 'settings';
 
 export default function App() {
-  const [busy, setBusy] = useState(false);
-  const [signedIn, setSignedIn] = useState<boolean | null>(null);
-  const [checks, setChecks] = useState<RuntimeCheck[]>([]);
-  const [events, setEvents] = useState<string[]>([]);
-  const [prompt, setPrompt] = useState(t('defaultPrompt'));
+  const [ready, setReady] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [connectionError, setConnectionError] = useState('');
+  const [screen, setScreen] = useState<Screen>('home');
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [photos, setPhotos] = useState<MealPhoto[]>([]);
   const [note, setNote] = useState('');
-  const [result, setResult] = useState<{ model: string; text: string } | null>(null);
+  const [sending, setSending] = useState(false);
+  const [captureError, setCaptureError] = useState('');
 
-  const log = (message: string) => {
-    setEvents((current) => [message, ...current].slice(0, 20));
-  };
-
-  useEffect(() => {
-    void isSignedIn()
-      .then(setSignedIn)
-      .catch((error) => {
-        setSignedIn(false);
-        log(`${t('error')}: ${String(error)}`);
-      });
+  const refresh = useCallback(async () => {
+    await finalizeExpiredClarifications();
+    setMeals(await listMeals());
   }, []);
 
-  const runChecks = async () => {
-    setBusy(true);
-    try {
-      const nextChecks = await checkPiMobileRuntime();
-      setChecks(nextChecks);
-      log(`${nextChecks.filter((check) => check.ok).length}/${nextChecks.length} runtime checks passed`);
-    } finally {
-      setBusy(false);
-    }
-  };
+  useEffect(() => {
+    void (async () => {
+      await initializeMeals();
+      const signedIn = await isSignedIn();
+      setAuthenticated(signedIn);
+      await refresh();
+      setReady(true);
 
-  const login = async () => {
-    setBusy(true);
-    log('OAuth: entering Pi models.login');
-    try {
-      await signInWithBrowser({
-        onEvent: (event) => {
-          if (event.type === 'auth_url') {
-            log(t('browserOpened'));
-          } else if (event.type === 'progress' || event.type === 'info') {
-            log(event.message);
-          } else {
-            log(`OAuth event: ${event.type}`);
-          }
-        },
-      });
-      setSignedIn(true);
-      log(t('signedIn'));
-    } catch (error) {
-      const detail = error instanceof Error
-        ? `${error.name}: ${error.message}`
-        : String(error);
-      log(`${t('error')}: ${detail}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const askModel = async () => {
-    setBusy(true);
-    setResult(null);
-    try {
-      const response = await sendTextPrompt(prompt);
-      setResult(response);
-      log(`Text request completed with ${response.model}`);
-    } catch (error) {
-      log(`${t('error')}: ${String(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const logout = async () => {
-    setBusy(true);
-    try {
-      await signOut();
-      setSignedIn(false);
-      setResult(null);
-      log(t('signedOut'));
-    } catch (error) {
-      log(`${t('error')}: ${String(error)}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const takePhoto = async () => {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      log(t('cameraDenied'));
-      return;
-    }
-
-    const capture = await ImagePicker.launchCameraAsync({
-      base64: true,
-      exif: false,
-      mediaTypes: ['images'],
-      quality: 0.6,
-    });
-
-    if (capture.canceled) return log(t('cancelled'));
-    await analyzeAsset(capture.assets[0], true);
-  };
-
-  const chooseTestPhoto = async () => {
-    const selection = await ImagePicker.launchImageLibraryAsync({
-      base64: true,
-      exif: false,
-      mediaTypes: ['images'],
-      quality: 0.6,
-    });
-
-    if (selection.canceled) return log(t('cancelled'));
-    await analyzeAsset(selection.assets[0], false);
-  };
-
-  const analyzeAsset = async (
-    asset: ImagePicker.ImagePickerAsset | undefined,
-    deleteTemporaryFile: boolean,
-  ) => {
-    if (!asset?.base64) {
-      log(t('noBase64'));
-      return;
-    }
-
-    setBusy(true);
-    setResult(null);
-    try {
-      const response = await analyzeMealPhoto({
-        base64: asset.base64,
-        mimeType: asset.mimeType ?? 'image/jpeg',
-        note,
-      });
-      setResult(response);
-      log(`Image request completed with ${response.model}`);
-    } catch (error) {
-      log(`${t('error')}: ${String(error)}`);
-    } finally {
-      if (deleteTemporaryFile) {
-        // Camera captures are temporary app files. Library selections are not
-        // deleted because their URI may refer to user-owned media.
-        try {
-          new File(asset.uri).delete();
-          log(t('tempDeleted'));
-        } catch (error) {
-          log(`${t('error')}: temporary photo cleanup failed: ${String(error)}`);
-        }
+      if (signedIn) {
+        const pending = (await listMeals()).filter(
+          (meal) => meal.status === 'queued' || meal.status === 'analyzing',
+        );
+        for (const meal of pending) void processMeal(meal.id).finally(refresh);
       }
-      setBusy(false);
+    })().catch(() => setReady(true));
+  }, [refresh]);
+
+  const connect = async () => {
+    setConnecting(true);
+    setConnectionError('');
+    try {
+      await signInWithBrowser({ onEvent: () => undefined });
+      setAuthenticated(true);
+    } catch {
+      setConnectionError(t('connectionError'));
+    } finally {
+      setConnecting(false);
     }
   };
+
+  const openCapture = () => {
+    setCaptureError('');
+    setScreen('camera');
+  };
+
+  const captured = (photo: MealPhoto) => {
+    setPhotos((current) => [...current, photo]);
+    setScreen('review');
+  };
+
+  const deletePhoto = (photo: MealPhoto) => {
+    try {
+      const file = new File(photo.uri);
+      if (file.exists) file.delete();
+    } catch {
+      // Camera cache cleanup is best effort.
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((current) => {
+      const removed = current[index];
+      if (removed) deletePhoto(removed);
+      return current.filter((_, photoIndex) => photoIndex !== index);
+    });
+  };
+
+  const discardCapture = () => {
+    photos.forEach(deletePhoto);
+    setPhotos([]);
+    setNote('');
+    setCaptureError('');
+    setScreen('home');
+  };
+
+  const sendMeal = async () => {
+    if (photos.length === 0 || sending) return;
+    setSending(true);
+    setCaptureError('');
+    try {
+      const meal = await createMeal({
+        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+        capturedAt: Date.now(),
+        note: note.trim(),
+        photos,
+      });
+      setPhotos([]);
+      setNote('');
+      setScreen('home');
+      await refresh();
+      void prepareMealNotifications();
+      void processMeal(meal.id).finally(refresh);
+    } catch {
+      setCaptureError(t('saveError'));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const retry = (meal: Meal) => {
+    void processMeal(meal.id).finally(refresh);
+    void refresh();
+  };
+
+  const answer = (meal: Meal, value: string) => {
+    void answerMealClarification(meal.id, value).finally(refresh);
+    void refresh();
+  };
+
+  const disconnect = async () => {
+    await signOut();
+    setAuthenticated(false);
+    setScreen('home');
+  };
+
+  if (!ready) {
+    return <View style={styles.loading}><StatusBar style="dark" /><ActivityIndicator color={color.action} /></View>;
+  }
+
+  if (!authenticated) {
+    return <ConnectScreen busy={connecting} error={connectionError} onConnect={connect} />;
+  }
+
+  if (screen === 'camera') {
+    return <><StatusBar style="light" /><CaptureScreen onCancel={() => setScreen(photos.length ? 'review' : 'home')} onCaptured={captured} /></>;
+  }
+
+  if (screen === 'review') {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <CaptureReviewScreen
+          error={captureError}
+          note={note}
+          photos={photos}
+          sending={sending}
+          onAddPhoto={openCapture}
+          onCancel={discardCapture}
+          onNoteChange={setNote}
+          onRemovePhoto={removePhoto}
+          onSend={sendMeal}
+        />
+      </>
+    );
+  }
+
+  if (screen === 'settings') {
+    return <SettingsScreen onBack={() => setScreen('home')} onSignOut={disconnect} />;
+  }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>{t('title')}</Text>
-        <Text style={styles.subtitle}>{t('subtitle')}</Text>
+      <HomeScreen
+        meals={meals}
+        onAnswer={answer}
+        onCapture={openCapture}
+        onRetry={retry}
+        onSettings={() => setScreen('settings')}
+      />
+    </>
+  );
+}
 
-        <View style={styles.statusRow}>
-          <View style={[styles.dot, signedIn ? styles.ok : styles.muted]} />
-          <Text style={styles.statusText}>
-            {signedIn === null ? t('checking') : signedIn ? t('signedIn') : t('signedOut')}
-          </Text>
-          {busy && <ActivityIndicator size="small" color="#1d6b45" />}
-        </View>
-
-        <ActionButton label={t('runChecks')} onPress={runChecks} disabled={busy} />
-        <ActionButton
-          label={signedIn ? t('signOut') : t('signIn')}
-          onPress={signedIn ? logout : login}
-          disabled={busy || signedIn === null}
-        />
-
-        <TextInput
-          value={prompt}
-          onChangeText={setPrompt}
-          placeholder={t('promptPlaceholder')}
-          placeholderTextColor="#798079"
-          multiline
-          style={[styles.input, styles.promptInput]}
-        />
-        <ActionButton
-          label={t('askModel')}
-          onPress={askModel}
-          disabled={busy || !signedIn || !prompt.trim()}
-          primary
-        />
-
-        <TextInput
-          value={note}
-          onChangeText={setNote}
-          placeholder={t('notePlaceholder')}
-          placeholderTextColor="#798079"
-          style={styles.input}
-        />
-        <ActionButton
-          label={t('takePhoto')}
-          onPress={takePhoto}
-          disabled={busy || !signedIn}
-        />
-        <ActionButton
-          label={t('choosePhoto')}
-          onPress={chooseTestPhoto}
-          disabled={busy || !signedIn}
-        />
-
-        {result && (
-          <Section title={`${t('result')} · ${result.model}`}>
-            <Text style={styles.body}>{result.text}</Text>
-          </Section>
-        )}
-
-        <Section title={t('diagnostics')}>
-          {checks.length === 0 ? (
-            <Text style={styles.quiet}>—</Text>
-          ) : (
-            checks.map((check) => (
-              <Text key={check.name} style={check.ok ? styles.pass : styles.fail}>
-                {check.ok ? '✓' : '✕'} {check.name}: {check.detail}
-              </Text>
-            ))
-          )}
-        </Section>
-
-        <Section title={t('events')}>
-          {events.length === 0 ? (
-            <Text style={styles.quiet}>—</Text>
-          ) : (
-            events.map((event, index) => (
-              <Text key={`${index}-${event}`} style={styles.event}>
-                {event}
-              </Text>
-            ))
-          )}
-        </Section>
-      </ScrollView>
+function ConnectScreen(props: { busy: boolean; error: string; onConnect: () => void }) {
+  return (
+    <SafeAreaView style={styles.connect}>
+      <StatusBar style="dark" />
+      <View style={styles.connectMark}><Ionicons name="restaurant" size={29} color={color.surface} /></View>
+      <Text style={styles.brand}>{t('appName')}</Text>
+      <View style={styles.connectCopy}>
+        <Text style={styles.connectTitle}>{t('connectTitle')}</Text>
+        <Text style={styles.connectBody}>{t('connectBody')}</Text>
+      </View>
+      <View style={styles.connectAction}>
+        {props.error ? <Text style={styles.error}>{props.error}</Text> : null}
+        <PrimaryButton busy={props.busy} label={props.busy ? t('connecting') : t('connectAction')} onPress={props.onConnect} />
+      </View>
     </SafeAreaView>
   );
 }
 
-function ActionButton(props: {
-  label: string;
-  onPress: () => void | Promise<void>;
-  disabled?: boolean;
-  primary?: boolean;
-}) {
+function SettingsScreen(props: { onBack: () => void; onSignOut: () => void }) {
   return (
-    <Pressable
-      accessibilityRole="button"
-      disabled={props.disabled}
-      onPress={props.onPress}
-      style={({ pressed }) => [
-        styles.button,
-        props.primary && styles.primaryButton,
-        props.disabled && styles.disabledButton,
-        pressed && styles.pressedButton,
-      ]}
-    >
-      <Text style={[styles.buttonText, props.primary && styles.primaryButtonText]}>
-        {props.label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function Section(props: { title: string; children: React.ReactNode }) {
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{props.title}</Text>
-      {props.children}
-    </View>
+    <SafeAreaView style={styles.settings}>
+      <StatusBar style="dark" />
+      <View style={styles.settingsHeader}>
+        <IconButton icon="arrow-back" label={t('back')} onPress={props.onBack} />
+        <Text style={styles.settingsTitle}>{t('settings')}</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+      <View style={styles.settingsBody}>
+        <View style={styles.connectionRow}>
+          <View style={styles.connectionIcon}><Ionicons name="checkmark" size={18} color={color.success} /></View>
+          <Text style={styles.connectionText}>{t('signedInAs')}</Text>
+        </View>
+        <Text style={styles.privacy}>{t('settingsBody')}</Text>
+        <Pressable accessibilityRole="button" onPress={props.onSignOut} hitSlop={10}>
+          <Text style={styles.signOut}>{t('signOut')}</Text>
+        </Pressable>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#f4f1e8' },
-  container: { padding: 24, paddingBottom: 64, gap: 12 },
-  title: { color: '#17251d', fontSize: 29, fontWeight: '800', letterSpacing: -0.5 },
-  subtitle: { color: '#526158', fontSize: 15, lineHeight: 21, marginBottom: 8 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  ok: { backgroundColor: '#2e8b57' },
-  muted: { backgroundColor: '#a6aaa6' },
-  statusText: { color: '#26382d', flex: 1, fontWeight: '600' },
-  button: {
-    minHeight: 48,
-    borderColor: '#708078',
-    borderRadius: 12,
-    borderWidth: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-  },
-  primaryButton: { backgroundColor: '#1d6b45', borderColor: '#1d6b45' },
-  disabledButton: { opacity: 0.4 },
-  pressedButton: { opacity: 0.72 },
-  buttonText: { color: '#26382d', fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  primaryButtonText: { color: '#fffdf7' },
-  input: {
-    minHeight: 48,
-    borderColor: '#b5b7ae',
-    borderRadius: 12,
-    borderWidth: 1,
-    color: '#17251d',
-    backgroundColor: '#fffdf7',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  promptInput: { minHeight: 92, textAlignVertical: 'top' },
-  section: { borderTopColor: '#c8c7bd', borderTopWidth: 1, marginTop: 10, paddingTop: 14, gap: 7 },
-  sectionTitle: { color: '#17251d', fontSize: 16, fontWeight: '800', marginBottom: 2 },
-  body: { color: '#26382d', fontSize: 15, lineHeight: 22 },
-  quiet: { color: '#8a8e89' },
-  pass: { color: '#226840', fontFamily: 'monospace', fontSize: 12 },
-  fail: { color: '#a33d35', fontFamily: 'monospace', fontSize: 12 },
-  event: { color: '#4e5751', fontFamily: 'monospace', fontSize: 12, lineHeight: 17 },
+  loading: { alignItems: 'center', backgroundColor: color.canvas, flex: 1, justifyContent: 'center' },
+  connect: { backgroundColor: color.canvas, flex: 1, paddingHorizontal: space.lg, paddingTop: space.xl },
+  connectMark: { alignItems: 'center', backgroundColor: color.action, borderRadius: 18, height: 58, justifyContent: 'center', width: 58 },
+  brand: { color: color.action, fontSize: 14, fontWeight: '700', marginTop: space.md },
+  connectCopy: { marginTop: 'auto', maxWidth: 350 },
+  connectTitle: { color: color.ink, fontSize: 34, fontWeight: '700', letterSpacing: -1.2, lineHeight: 39 },
+  connectBody: { color: color.muted, fontSize: 16, lineHeight: 23, marginTop: space.md },
+  connectAction: { gap: space.sm, marginBottom: space.xl, marginTop: space.xl },
+  error: { color: color.error, fontSize: 13, textAlign: 'center' },
+  settings: { backgroundColor: color.canvas, flex: 1 },
+  settingsHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingTop: space.sm },
+  settingsTitle: { color: color.ink, fontSize: 17, fontWeight: '700' },
+  headerSpacer: { width: 48 },
+  settingsBody: { paddingHorizontal: space.lg, paddingTop: space.xl },
+  connectionRow: { alignItems: 'center', flexDirection: 'row', gap: 12 },
+  connectionIcon: { alignItems: 'center', backgroundColor: color.surface, borderRadius: radius.round, height: 38, justifyContent: 'center', width: 38 },
+  connectionText: { color: color.ink, fontSize: 16, fontWeight: '600' },
+  privacy: { color: color.muted, fontSize: 14, lineHeight: 21, marginTop: space.lg, maxWidth: 330 },
+  signOut: { color: color.error, fontSize: 15, fontWeight: '600', marginTop: space.xl },
 });

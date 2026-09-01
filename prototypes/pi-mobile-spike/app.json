@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "CaloDone Pi Mobile Spike",
-    "slug": "calodone-pi-mobile-spike",
+    "name": "CaloDone",
+    "slug": "calodone",
     "scheme": "calodone",
-    "version": "1.0.2",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -11,7 +11,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "dev.calodone.pi-mobile-spike",
       "infoPlist": {
-        "NSCameraUsageDescription": "Take a meal photo for the Pi mobile compatibility test."
+        "NSCameraUsageDescription": "CaloDone uses the camera to photograph meals without saving them to your gallery."
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "dev.calodone.pimobilespike",
-      "versionCode": 3,
+      "versionCode": 4,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -34,14 +34,15 @@
     "plugins": [
       "expo-secure-store",
       [
-        "expo-image-picker",
+        "expo-camera",
         {
-          "cameraPermission": "Take a meal photo for the Pi mobile compatibility test.",
-          "photosPermission": false,
-          "microphonePermission": false
+          "cameraPermission": "CaloDone uses the camera to photograph meals without saving them to your gallery.",
+          "recordAudioAndroid": false
         }
       ],
-      "expo-web-browser"
+      "expo-notifications",
+      "expo-web-browser",
+      "expo-sqlite"
     ]
   }
 }
