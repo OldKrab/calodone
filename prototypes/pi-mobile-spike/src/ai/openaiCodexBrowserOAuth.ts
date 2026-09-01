@@ -172,9 +172,11 @@ function stageError(stage: string, error: unknown): Error {
 }
 
 async function login(interaction: ProviderAuthInteraction): Promise<OAuthCredential> {
+  interaction.notify({ type: 'progress', message: 'OAuth: creating authorization request' });
   const authorization = await createAuthorizationFlow().catch((error) => {
     throw stageError('OAuth setup failed', error);
   });
+  interaction.notify({ type: 'progress', message: 'OAuth: starting localhost callback listener' });
   const callbackServer = await startCallbackServer(
     authorization.state,
     interaction.signal,
@@ -186,6 +188,7 @@ async function login(interaction: ProviderAuthInteraction): Promise<OAuthCredent
     url: authorization.url,
     instructions: 'Complete ChatGPT login in the browser.',
   });
+  interaction.notify({ type: 'progress', message: 'OAuth: opening browser' });
 
   // Android's auth session observes the CaloDone deep link emitted by the
   // callback page and brings the existing activity back to the foreground.
@@ -203,6 +206,7 @@ async function login(interaction: ProviderAuthInteraction): Promise<OAuthCredent
 
   try {
     const code = await callbackServer.waitForCode();
+    interaction.notify({ type: 'progress', message: 'OAuth: callback received, exchanging token' });
     return await exchangeCode(code, authorization.verifier, interaction.signal).catch((error) => {
       throw stageError('Token exchange failed', error);
     });

@@ -3,7 +3,7 @@
     "name": "CaloDone Pi Mobile Spike",
     "slug": "calodone-pi-mobile-spike",
     "scheme": "calodone",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "dev.calodone.pimobilespike",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",

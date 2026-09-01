@@ -58,6 +58,7 @@ export default function App() {
 
   const login = async () => {
     setBusy(true);
+    log('OAuth: entering Pi models.login');
     try {
       await signInWithBrowser({
         onEvent: (event) => {
@@ -73,7 +74,10 @@ export default function App() {
       setSignedIn(true);
       log(t('signedIn'));
     } catch (error) {
-      log(`${t('error')}: ${String(error)}`);
+      const detail = error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : String(error);
+      log(`${t('error')}: ${detail}`);
     } finally {
       setBusy(false);
     }

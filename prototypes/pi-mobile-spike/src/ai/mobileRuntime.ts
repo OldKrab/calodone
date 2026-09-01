@@ -11,6 +11,19 @@ type MutableGlobal = Omit<typeof globalThis, 'crypto'> & {
 
 /** Install only the Web Crypto surface used by Pi's device-code PKCE flow. */
 export function installPiMobileRuntime(): void {
+  const signal = new AbortController().signal;
+  if (typeof signal.throwIfAborted !== 'function') {
+    Object.defineProperty(Object.getPrototypeOf(signal), 'throwIfAborted', {
+      configurable: true,
+      value(this: AbortSignal) {
+        if (!this.aborted) return;
+        const error = new Error('The operation was aborted');
+        error.name = 'AbortError';
+        throw error;
+      },
+    });
+  }
+
   const root = globalThis as unknown as MutableGlobal;
   const currentCrypto = root.crypto;
 
@@ -52,6 +65,11 @@ export async function checkPiMobileRuntime(): Promise<RuntimeCheck[]> {
     `${typeof atob} / ${typeof btoa}`);
   record('TextEncoder', typeof TextEncoder === 'function', typeof TextEncoder);
   record('AbortController', typeof AbortController === 'function', typeof AbortController);
+  record(
+    'AbortSignal.throwIfAborted',
+    typeof new AbortController().signal.throwIfAborted === 'function',
+    typeof new AbortController().signal.throwIfAborted,
+  );
   record('ReadableStream', typeof ReadableStream === 'function', typeof ReadableStream);
   record('crypto.getRandomValues', typeof crypto?.getRandomValues === 'function',
     typeof crypto?.getRandomValues);
