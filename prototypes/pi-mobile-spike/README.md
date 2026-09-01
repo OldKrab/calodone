@@ -26,7 +26,7 @@ npm install
 npm run ios
 ```
 
-The simulator can test bundling, login, Keychain storage, and streaming. It cannot take a real camera photo; use Android for the end-to-end camera check. SecureStore's biometric behavior also requires a physical device, but this prototype does not enable biometric-gated reads.
+The simulator can test bundling, login, Keychain storage, and streaming. It cannot take a real camera photo, so drag an image into the simulator's Photos app and select **Choose a test photo (simulator)**. Use Android for the end-to-end camera check. SecureStore's biometric behavior also requires a physical device, but this prototype does not enable biometric-gated reads.
 
 ## What counts as success
 

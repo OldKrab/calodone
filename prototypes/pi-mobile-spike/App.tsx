@@ -109,12 +109,26 @@ export default function App() {
       quality: 0.6,
     });
 
-    if (capture.canceled) {
-      log(t('cancelled'));
-      return;
-    }
+    if (capture.canceled) return log(t('cancelled'));
+    await analyzeAsset(capture.assets[0], true);
+  };
 
-    const asset = capture.assets[0];
+  const chooseTestPhoto = async () => {
+    const selection = await ImagePicker.launchImageLibraryAsync({
+      base64: true,
+      exif: false,
+      mediaTypes: ['images'],
+      quality: 0.6,
+    });
+
+    if (selection.canceled) return log(t('cancelled'));
+    await analyzeAsset(selection.assets[0], false);
+  };
+
+  const analyzeAsset = async (
+    asset: ImagePicker.ImagePickerAsset | undefined,
+    deleteTemporaryFile: boolean,
+  ) => {
     if (!asset?.base64) {
       log(t('noBase64'));
       return;
@@ -133,13 +147,15 @@ export default function App() {
     } catch (error) {
       log(`${t('error')}: ${String(error)}`);
     } finally {
-      // ImagePicker camera captures are temporary app files. Delete immediately
-      // after the request so this spike does not accumulate meal photos.
-      try {
-        new File(asset.uri).delete();
-        log(t('tempDeleted'));
-      } catch (error) {
-        log(`${t('error')}: temporary photo cleanup failed: ${String(error)}`);
+      if (deleteTemporaryFile) {
+        // Camera captures are temporary app files. Library selections are not
+        // deleted because their URI may refer to user-owned media.
+        try {
+          new File(asset.uri).delete();
+          log(t('tempDeleted'));
+        } catch (error) {
+          log(`${t('error')}: temporary photo cleanup failed: ${String(error)}`);
+        }
       }
       setBusy(false);
     }
@@ -186,6 +202,11 @@ export default function App() {
           onPress={takePhoto}
           disabled={busy || !signedIn}
           primary
+        />
+        <ActionButton
+          label={t('choosePhoto')}
+          onPress={chooseTestPhoto}
+          disabled={busy || !signedIn}
         />
 
         {result && (
