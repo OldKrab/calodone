@@ -4,9 +4,8 @@ import type {
   ProviderAuthInteraction,
 } from '@earendil-works/pi-ai';
 import * as WebBrowser from 'expo-web-browser';
-import TcpSocket from 'react-native-tcp-socket';
-import type Server from 'react-native-tcp-socket/lib/types/Server';
-import type Socket from 'react-native-tcp-socket/lib/types/Socket';
+
+import { CodexLoopback } from '../../modules/codex-loopback';
 
 // These values mirror Pi's OpenAI Codex provider. OpenAI registers the
 // localhost redirect against this public client, so the redirect URI is a
@@ -143,156 +142,70 @@ async function refresh(
   return requireToken(response, 'Token refresh');
 }
 
-function sendResponse(
-  socket: Socket,
-  status: string,
-  body: string,
-  headers: Record<string, string> = {},
-): void {
-  const responseHeaders = {
-    'Cache-Control': 'no-store',
-    Connection: 'close',
-    'Content-Length': String(new TextEncoder().encode(body).byteLength),
-    'Content-Type': 'text/html; charset=utf-8',
-    ...headers,
+async function startCallbackServer(
+  expectedState: string,
+  signal: AbortSignal,
+): Promise<CallbackServer> {
+  if (signal.aborted) throw new Error('Login cancelled');
+
+  await CodexLoopback.start(expectedState);
+  const codePromise = CodexLoopback.waitForCode();
+  const onAbort = () => CodexLoopback.cancel('Login cancelled');
+  const timeout = setTimeout(
+    () => CodexLoopback.cancel('Login callback timed out'),
+    CALLBACK_TIMEOUT_MS,
+  );
+  signal.addEventListener('abort', onAbort, { once: true });
+
+  const close = () => {
+    clearTimeout(timeout);
+    signal.removeEventListener('abort', onAbort);
+    CodexLoopback.close();
   };
-  const serializedHeaders = Object.entries(responseHeaders)
-    .map(([name, value]) => `${name}: ${value}`)
-    .join('\r\n');
-  socket.end(`HTTP/1.1 ${status}\r\n${serializedHeaders}\r\n\r\n${body}`);
+  const cancel = (error: Error) => CodexLoopback.cancel(error.message);
+  return { close, cancel, waitForCode: () => codePromise };
 }
 
-function successPage(): string {
-  // No credential or authorization code enters the app deep link. The loopback
-  // listener already owns the code; this URI only returns focus to the app.
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>CaloDone login</title></head><body><p>Login complete. Returning to CaloDone...</p><p><a href="${APP_RETURN_URI}">Return to CaloDone</a></p><script>location.replace('${APP_RETURN_URI}')</script></body></html>`;
-}
-
-function startCallbackServer(expectedState: string, signal: AbortSignal): Promise<CallbackServer> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let resolveCode!: (code: string) => void;
-    let rejectCode!: (error: Error) => void;
-    const codePromise = new Promise<string>((resolveValue, rejectValue) => {
-      resolveCode = resolveValue;
-      rejectCode = rejectValue;
-    });
-    const timeout = setTimeout(
-      () => cancel(new Error('Login callback timed out')),
-      CALLBACK_TIMEOUT_MS,
-    );
-
-    const close = () => {
-      clearTimeout(timeout);
-      signal.removeEventListener('abort', onAbort);
-      if (server.listening) server.close();
-    };
-    const cancel = (error: Error) => {
-      if (settled) return;
-      settled = true;
-      rejectCode(error);
-      close();
-    };
-    const onAbort = () => cancel(new Error('Login cancelled'));
-
-    const server: Server = TcpSocket.createServer((socket) => {
-      socket.setEncoding('utf8');
-      let request = '';
-      let handled = false;
-
-      socket.on('data', (chunk) => {
-        if (handled) return;
-        request += String(chunk);
-        if (request.length > 16_384) {
-          handled = true;
-          sendResponse(socket, '431 Request Header Fields Too Large', 'Request too large.');
-          return;
-        }
-        if (!request.includes('\r\n\r\n')) return;
-        handled = true;
-
-        try {
-          const requestLine = request.split('\r\n', 1)[0] ?? '';
-          const [method, target] = requestLine.split(' ');
-          const callback = new URL(target ?? '', REDIRECT_URI);
-          if (method !== 'GET' || callback.pathname !== '/auth/callback') {
-            sendResponse(socket, '404 Not Found', 'Callback route not found.');
-            return;
-          }
-          if (callback.searchParams.get('state') !== expectedState) {
-            sendResponse(socket, '400 Bad Request', 'OAuth state mismatch.');
-            return;
-          }
-
-          const oauthError = callback.searchParams.get('error');
-          if (oauthError) {
-            sendResponse(socket, '400 Bad Request', 'OpenAI login was not completed.');
-            cancel(new Error(`OpenAI login failed: ${oauthError}`));
-            return;
-          }
-
-          const code = callback.searchParams.get('code');
-          if (!code) {
-            sendResponse(socket, '400 Bad Request', 'Authorization code is missing.');
-            return;
-          }
-
-          sendResponse(socket, '200 OK', successPage());
-          if (!settled) {
-            settled = true;
-            resolveCode(code);
-          }
-        } catch (error) {
-          sendResponse(socket, '400 Bad Request', 'Invalid OAuth callback.');
-        }
-      });
-      socket.on('error', () => {
-        socket.destroy();
-      });
-    });
-
-    server.on('error', (error) => {
-      cancel(error);
-      reject(error);
-    });
-    server.listen({ port: 1455, host: '127.0.0.1', reuseAddress: true }, () => {
-      if (signal.aborted) {
-        cancel(new Error('Login cancelled'));
-        reject(new Error('Login cancelled'));
-        return;
-      }
-      signal.addEventListener('abort', onAbort, { once: true });
-      resolve({ close, cancel, waitForCode: () => codePromise });
-    });
-  });
+function stageError(stage: string, error: unknown): Error {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new Error(`${stage}: ${detail}`, { cause: error });
 }
 
 async function login(interaction: ProviderAuthInteraction): Promise<OAuthCredential> {
-  const { state, verifier, url } = await createAuthorizationFlow();
-  const callbackServer = await startCallbackServer(state, interaction.signal);
+  const authorization = await createAuthorizationFlow().catch((error) => {
+    throw stageError('OAuth setup failed', error);
+  });
+  const callbackServer = await startCallbackServer(
+    authorization.state,
+    interaction.signal,
+  ).catch((error) => {
+    throw stageError('OAuth callback listener failed', error);
+  });
   interaction.notify({
     type: 'auth_url',
-    url,
+    url: authorization.url,
     instructions: 'Complete ChatGPT login in the browser.',
   });
 
   // Android's auth session observes the CaloDone deep link emitted by the
   // callback page and brings the existing activity back to the foreground.
   // The authorization code itself is accepted only by the loopback listener.
-  void WebBrowser.openAuthSessionAsync(url, APP_RETURN_URI).then(
+  void WebBrowser.openAuthSessionAsync(authorization.url, APP_RETURN_URI).then(
     (result) => {
       if (result.type !== 'success') {
         callbackServer.cancel(new Error('Browser login was cancelled'));
       }
     },
     (error) => {
-      callbackServer.cancel(error instanceof Error ? error : new Error(String(error)));
+      callbackServer.cancel(stageError('Browser launch failed', error));
     },
   );
 
   try {
     const code = await callbackServer.waitForCode();
-    return await exchangeCode(code, verifier, interaction.signal);
+    return await exchangeCode(code, authorization.verifier, interaction.signal).catch((error) => {
+      throw stageError('Token exchange failed', error);
+    });
   } finally {
     callbackServer.close();
   }
