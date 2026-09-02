@@ -13,11 +13,11 @@ const icon = (name) => {
 };
 
 const copy = {
-  en: { today: 'Today', kcal: 'kcal', protein: 'Protein', carbs: 'Carbs', fat: 'Fat', meals: 'Meals', add: 'Add meal', question: 'One quick question', questionText: 'Was the white sauce sour cream or mayonnaise?', answer: 'Type an answer', breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', estimated: 'Estimated', settings: 'Settings', goals: 'Daily goals', goalsHelp: 'Used only as a quiet reference. CaloDone does not grade your food.', calories: 'Calories', language: 'Language', save: 'Save goals', details: 'Meal details', edit: 'Edit', fix: 'Fix with AI', fixPlaceholder: 'Two eggs, not three…', sent: 'Correction sent', cameraHint: 'Photograph the whole meal', review: '1 photo', note: 'Add a note (optional)', send: 'Send and leave', addPhoto: 'Add photo', queued: 'Meal sent — analyzing in background' },
-  ru: { today: 'Сегодня', kcal: 'ккал', protein: 'Белки', carbs: 'Углеводы', fat: 'Жиры', meals: 'Приёмы пищи', add: 'Добавить еду', question: 'Один вопрос', questionText: 'Белый соус — сметана или майонез?', answer: 'Написать ответ', breakfast: 'Завтрак', lunch: 'Обед', dinner: 'Ужин', estimated: 'Оценено', settings: 'Настройки', goals: 'Дневные цели', goalsHelp: 'Только спокойный ориентир. CaloDone не оценивает вашу еду.', calories: 'Калории', language: 'Язык', save: 'Сохранить цели', details: 'Приём пищи', edit: 'Изменить', fix: 'Исправить с ИИ', fixPlaceholder: 'Два яйца, не три…', sent: 'Исправление отправлено', cameraHint: 'Снимите весь приём пищи', review: '1 фото', note: 'Добавить заметку (необязательно)', send: 'Отправить и уйти', addPhoto: 'Ещё фото', queued: 'Еда отправлена — анализируем в фоне' },
+  en: { today: 'Today', kcal: 'kcal', protein: 'Protein', carbs: 'Carbs', fat: 'Fat', meals: 'Meals', add: 'Add meal', question: 'Question about this meal', questionText: 'Was the white sauce sour cream or mayonnaise?', answer: 'Type an answer', breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', estimated: 'Estimated', needsInput: 'Needs input', settings: 'Settings', goals: 'Daily goals', goalsHelp: 'A quiet reference only. CaloDone never grades your food.', calories: 'Calories', language: 'Language', save: 'Save goals', details: 'Meal details', edit: 'Edit', fix: 'Fix with AI', fixPlaceholder: 'Two eggs, not three…', sent: 'Correction sent', cameraHint: 'Photograph the whole meal', review: '1 photo', note: 'Add a note (optional)', send: 'Send and leave', addPhoto: 'Add photo', queued: 'Meal sent, analyzing in background', accountAi: 'Account & AI', aiProvider: 'AI provider', connected: 'Codex · Connected', tracking: 'Tracking', units: 'Nutrition units', metricUnits: 'kcal · grams', notifications: 'Notifications', questionsFailures: 'Questions and failures', appSection: 'App', dataPrivacy: 'Data & privacy', savedPhotos: 'Photos kept with meals', about: 'About CaloDone', version: 'Version 1.2.0', notificationHelp: 'Choose when CaloDone is allowed to interrupt you.', clarificationNotifications: 'Meal questions', clarificationNotificationsHelp: 'When an answer could materially change the estimate', failedNotifications: 'Failed analysis', failedNotificationsHelp: 'When a meal could not be processed', readyNotifications: 'Meal ready', readyNotificationsHelp: 'After every successful analysis', reminderNotifications: 'Daily reminder', reminderNotificationsHelp: 'A quiet prompt if no meals were logged', on: 'On', off: 'Off', done: 'Done', mealPhotos: 'Meal photos', photoCount: '1 saved photo' },
+  ru: { today: 'Сегодня', kcal: 'ккал', protein: 'Белки', carbs: 'Углеводы', fat: 'Жиры', meals: 'Приёмы пищи', add: 'Добавить еду', question: 'Вопрос об этой еде', questionText: 'Белый соус — сметана или майонез?', answer: 'Написать ответ', breakfast: 'Завтрак', lunch: 'Обед', dinner: 'Ужин', estimated: 'Оценено', needsInput: 'Нужен ответ', settings: 'Настройки', goals: 'Дневные цели', goalsHelp: 'Только спокойный ориентир. CaloDone не оценивает вашу еду.', calories: 'Калории', language: 'Язык', save: 'Сохранить цели', details: 'Приём пищи', edit: 'Изменить', fix: 'Исправить с ИИ', fixPlaceholder: 'Два яйца, не три…', sent: 'Исправление отправлено', cameraHint: 'Снимите весь приём пищи', review: '1 фото', note: 'Добавить заметку (необязательно)', send: 'Отправить и уйти', addPhoto: 'Ещё фото', queued: 'Еда отправлена, анализируем в фоне', accountAi: 'Аккаунт и ИИ', aiProvider: 'ИИ-провайдер', connected: 'Codex · Подключён', tracking: 'Отслеживание', units: 'Единицы измерения', metricUnits: 'ккал · граммы', notifications: 'Уведомления', questionsFailures: 'Вопросы и ошибки', appSection: 'Приложение', dataPrivacy: 'Данные и приватность', savedPhotos: 'Фото хранятся вместе с едой', about: 'О CaloDone', version: 'Версия 1.2.0', notificationHelp: 'Выберите, когда CaloDone может вас отвлекать.', clarificationNotifications: 'Вопросы о еде', clarificationNotificationsHelp: 'Когда ответ может заметно изменить оценку', failedNotifications: 'Ошибка анализа', failedNotificationsHelp: 'Если еду не удалось обработать', readyNotifications: 'Еда готова', readyNotificationsHelp: 'После каждого успешного анализа', reminderNotifications: 'Ежедневное напоминание', reminderNotificationsHelp: 'Если за день ничего не добавлено', on: 'Вкл.', off: 'Выкл.', done: 'Готово', mealPhotos: 'Фотографии еды', photoCount: '1 сохранённое фото' },
 };
 
-const state = { screen: 'home', lang: 'en', toast: '', answered: false };
+const state = { screen: 'home', lang: 'en', toast: '', answered: false, notifications: { questions: true, failed: true, ready: false, reminder: false } };
 const t = (key) => copy[state.lang][key];
 const app = document.querySelector('#app');
 
@@ -33,7 +33,7 @@ function home() {
     <section class="summary"><p class="calories">1,326 / 2,000 <span class="unit">${t('kcal')}</span></p><div class="track"><span></span></div>
       <div class="macro-row"><div class="macro"><strong>74 / 120 g</strong><small>${t('protein')}</small></div><div class="macro"><strong>139 / 220 g</strong><small>${t('carbs')}</small></div><div class="macro"><strong>52 / 65 g</strong><small>${t('fat')}</small></div></div>
     </section>
-    ${state.answered ? '' : `<section class="question"><p class="question-label">✦ ${t('question')}</p><p class="question-text">${t('questionText')}</p><div class="composer"><input id="answer" placeholder="${t('answer')}"/><button class="send-circle" data-action="answer" aria-label="Send">↑</button></div></section>`}
+    ${state.answered ? '' : `<section class="question"><button class="question-meal" data-action="detail"><span class="mini-photo">${foodPlate()}</span><span><strong>${t('lunch')}</strong><small>13:05 · 612 ${t('kcal')}</small></span><b aria-hidden="true">›</b></button><p class="question-label">✦ ${t('question')}</p><p class="question-text">${t('questionText')}</p><div class="composer"><input id="answer" placeholder="${t('answer')}"/><button class="send-circle" data-action="answer" aria-label="Send">↑</button></div></section>`}
     <div class="row section-title"><h2>${t('meals')}</h2><span class="count">3</span></div>
     <div class="meal-list">
       ${meal('sun',t('breakfast'),'08:20','Oatmeal, blueberries, yogurt','438')}
@@ -45,8 +45,10 @@ function home() {
 }
 
 function meal(symbol, title, time, items, kcal, pending = false) {
-  return `<button class="meal" data-action="detail"><span class="meal-icon">${icon(symbol)}</span><span class="meal-copy"><span class="meal-head"><span class="meal-title">${title}</span><span class="meal-kcal">${kcal} ${t('kcal')}</span></span><span class="meal-meta"><span>${time}</span><span class="status">${pending ? '<i class="dot"></i>' : ''}${t('estimated')}</span></span><span class="meal-items">${items}</span></span></button>`;
+  return `<button class="meal" data-action="detail"><span class="meal-icon">${icon(symbol)}</span><span class="meal-copy"><span class="meal-head"><span class="meal-title">${title}</span><span class="meal-kcal">${kcal} ${t('kcal')}</span></span><span class="meal-meta"><span>${time}</span><span class="status">${pending ? '<i class="dot"></i>' + t('needsInput') : t('estimated')}</span></span><span class="meal-items">${items}</span></span></button>`;
 }
+
+function foodPlate() { return '<i class="tiny-plate"><i class="tiny-food one"></i><i class="tiny-food two"></i><i class="tiny-food three"></i></i>'; }
 
 function detail() {
   const items = state.lang === 'ru'
@@ -54,6 +56,7 @@ function detail() {
     : [['Chicken breast','170 g','280'],['Buckwheat','180 g','198'],['Cucumber salad','150 g','74'],['Sour cream','30 g','60']];
   return shell(`<section class="screen detail"><header class="header">${btnIcon('back','Back','home')}<h2>${t('details')}</h2><button class="header-action" data-action="edit">${t('edit')}</button></header>
     <p class="meal-type">${t('lunch')} · 13:05</p><h1 class="detail-title">${state.lang === 'ru' ? 'Курица с гречкой и салатом' : 'Chicken, buckwheat & salad'}</h1>
+    <section class="saved-photos" aria-label="${t('mealPhotos')}"><div class="saved-photo">${foodPlate()}<span>${t('photoCount')}</span></div></section>
     <div class="detail-total"><strong>612 ${t('kcal')}</strong><span>P 48 · C 58 · F 21</span></div>
     <div>${items.map(i => `<div class="food-row"><div><strong>${i[0]}</strong><small>${i[1]}</small></div><div class="food-nutrition"><strong>${i[2]} ${t('kcal')}</strong><small>P 12 · C 8 · F 4</small></div></div>`).join('')}</div>
     <section class="ai-fix"><p class="ai-label">✦ ${t('fix')}</p><div class="composer"><input id="fix" placeholder="${t('fixPlaceholder')}"/><button class="send-circle" data-action="fix" aria-label="Send">↑</button></div></section>
@@ -61,13 +64,39 @@ function detail() {
 }
 
 function settings() {
-  return shell(`<section class="screen settings"><header class="header">${btnIcon('back','Back','home')}<h2>${t('settings')}</h2><span></span></header><h1>${t('goals')}</h1><p class="settings-copy">${t('goalsHelp')}</p>
-    <div class="settings-group">${setting(t('calories'),'2000 ' + t('kcal'))}${setting(t('protein'),'120 g')}${setting(t('carbs'),'220 g')}${setting(t('fat'),'65 g')}</div>
-    <div class="setting-row"><label>${t('language')}</label><button class="language" data-action="language">${state.lang === 'en' ? 'English' : 'Русский'} ↕</button></div>
-    <div style="margin-top:28px"><button class="primary" data-action="save">${t('save')}</button></div>
+  return shell(`<section class="screen settings"><header class="header settings-header">${btnIcon('back','Back','home')}<h2>${t('settings')}</h2><span></span></header>
+    ${settingsSection(t('accountAi'), settingsLink(t('aiProvider'), t('connected'), 'provider'))}
+    ${settingsSection(t('tracking'), settingsLink(t('goals'), `2000 ${t('kcal')}`, 'goals') + settingsLink(t('units'), t('metricUnits'), 'units') + settingsLink(t('notifications'), t('questionsFailures'), 'notifications'))}
+    ${settingsSection(t('appSection'), settingsLink(t('language'), state.lang === 'en' ? 'English' : 'Русский', 'language') + settingsLink(t('dataPrivacy'), t('savedPhotos'), 'privacy') + settingsLink(t('about'), t('version'), 'about'))}
   </section>`);
 }
-function setting(label, value) { return `<div class="setting-row"><label>${label}</label><input value="${value}" aria-label="${label}"/></div>`; }
+function settingsSection(title, content) { return `<section class="settings-section"><h3>${title}</h3><div class="settings-panel">${content}</div></section>`; }
+function settingsLink(label, value, action) { return `<button class="settings-link" data-action="${action}"><span><strong>${label}</strong><small>${value}</small></span><b aria-hidden="true">›</b></button>`; }
+
+function goals() {
+  return shell(`<section class="screen settings"><header class="header">${btnIcon('back','Back','settings')}<h2>${t('goals')}</h2><span></span></header><p class="settings-copy detail-copy">${t('goalsHelp')}</p>
+    <div class="settings-panel goal-panel">${setting(t('calories'),'2000 ' + t('kcal'))}${setting(t('protein'),'120 g')}${setting(t('carbs'),'220 g')}${setting(t('fat'),'65 g')}</div>
+    <div class="settings-primary"><button class="primary" data-action="save">${t('save')}</button></div>
+  </section>`);
+}
+
+function notifications() {
+  return shell(`<section class="screen settings"><header class="header">${btnIcon('back','Back','settings')}<h2>${t('notifications')}</h2><span></span></header><p class="settings-copy detail-copy">${t('notificationHelp')}</p>
+    <div class="settings-panel notification-panel">
+      ${toggleSetting('questions', t('clarificationNotifications'), t('clarificationNotificationsHelp'))}
+      ${toggleSetting('failed', t('failedNotifications'), t('failedNotificationsHelp'))}
+      ${toggleSetting('ready', t('readyNotifications'), t('readyNotificationsHelp'))}
+      ${toggleSetting('reminder', t('reminderNotifications'), t('reminderNotificationsHelp'))}
+    </div>
+    <button class="text-action" data-action="settings">${t('done')}</button>
+  </section>`);
+}
+
+function setting(label, value) { return `<label class="setting-row"><span>${label}</span><input value="${value}" aria-label="${label}"/></label>`; }
+function toggleSetting(key, label, help) {
+  const checked = state.notifications[key];
+  return `<div class="toggle-row"><span><strong>${label}</strong><small>${help}</small></span><button class="toggle ${checked ? 'checked' : ''}" role="switch" aria-checked="${checked}" aria-label="${label}" data-action="toggle-${key}"><i></i></button></div>`;
+}
 
 function camera() {
   return shell(`<section class="camera-screen"><header class="camera-top">${btnIcon('close','Close','home')}<span></span></header><div class="viewfinder"><div class="plate"><i class="food one"></i><i class="food two"></i><i class="food three"></i></div><span class="camera-hint">${t('cameraHint')}</span></div><div class="camera-actions"><span class="camera-side"></span><button class="shutter" data-action="capture" aria-label="Take photo"></button><span class="camera-side">1×</span></div></section>`, 'camera');
@@ -78,7 +107,7 @@ function review() {
 }
 
 function render() {
-  app.innerHTML = ({ home, detail, settings, camera, review }[state.screen] || home)();
+  app.innerHTML = ({ home, detail, settings, goals, notifications, camera, review }[state.screen] || home)();
   document.documentElement.lang = state.lang;
 }
 
@@ -88,14 +117,16 @@ app.addEventListener('click', (event) => {
   const target = event.target.closest('[data-action]');
   if (!target) return;
   const action = target.dataset.action;
-  if (['home','detail','settings','camera','review'].includes(action)) state.screen = action;
+  if (['home','detail','settings','goals','notifications','camera','review'].includes(action)) state.screen = action;
   if (action === 'capture') state.screen = 'review';
   if (action === 'language') state.lang = state.lang === 'en' ? 'ru' : 'en';
+  if (action.startsWith('toggle-')) state.notifications[action.slice(7)] = !state.notifications[action.slice(7)];
   if (action === 'answer') { state.answered = true; showToast(state.lang === 'ru' ? 'Ответ отправлен' : 'Answer sent'); return; }
   if (action === 'fix') { showToast(t('sent')); return; }
   if (action === 'send') { state.screen = 'home'; showToast(t('queued')); return; }
   if (action === 'save') { state.screen = 'home'; showToast(state.lang === 'ru' ? 'Цели сохранены' : 'Goals saved'); return; }
-  if (action === 'edit') { showToast(state.lang === 'ru' ? 'Ручной редактор — следующий экран' : 'Manual editor — next screen'); return; }
+  if (['provider','units','privacy','about'].includes(action)) { showToast(state.lang === 'ru' ? 'Экран появится в приложении' : 'This screen will live in the app'); return; }
+  if (action === 'edit') { showToast(state.lang === 'ru' ? 'Ручной редактор: следующий экран' : 'Manual editor: next screen'); return; }
   render();
 });
 
