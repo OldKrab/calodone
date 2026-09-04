@@ -86,7 +86,14 @@ jobs:
           artifact="calodone-${version}-arm64.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$artifact"
 
-          signer=$("$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --print-certs "$artifact" | sed -n 's/Signer #1 certificate SHA-256 digest: //p')
+          apksigner=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          if [ -z "$apksigner" ]; then
+            echo "apksigner was not found under ANDROID_HOME" >&2
+            exit 1
+          fi
+          certificate=$($apksigner verify --print-certs "$artifact")
+          printf '%s\n' "$certificate"
+          signer=$(printf '%s\n' "$certificate" | awk -F': ' '/SHA-256 digest/ { print tolower($2); exit }' | tr -d ':')
           expected="fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c"
           if [ "$signer" != "$expected" ]; then
             echo "Unexpected signing certificate: $signer" >&2
