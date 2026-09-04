@@ -45,8 +45,10 @@ jobs:
         run: npm ci
 
       - name: Check source
+        shell: bash
         run: |
           npm run check
+          shopt -s globstar
           node --test src/**/*.test.ts
 
       - name: Generate native Android project

@@ -1,4 +1,4 @@
-import { openDatabaseSync } from 'expo-sqlite';
+import { database, transaction } from './database';
 
 import type {
   DailyGoals,
@@ -11,7 +11,6 @@ import { parseGoalProfile, type GoalProfile } from '../domain/goalEstimator';
 import { normalizeMealPhotos } from '../domain/mealOperations';
 import { normalizeClarification } from '../domain/mealQuestions';
 
-const database = openDatabaseSync('calodone.db');
 
 type MealRow = {
   id: string;
@@ -345,8 +344,7 @@ export async function saveGoalProfile(profile: GoalProfile): Promise<void> {
 
 /** Persists profile inputs and their reviewed goals as one setup decision. */
 export async function saveGoalSetup(profile: GoalProfile, goals: DailyGoals): Promise<void> {
-  await database.execAsync('BEGIN IMMEDIATE');
-  try {
+  await transaction(async (database) => {
     await database.runAsync(
       `INSERT INTO preferences (key, value) VALUES ('goal_profile', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
@@ -357,11 +355,7 @@ export async function saveGoalSetup(profile: GoalProfile, goals: DailyGoals): Pr
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       JSON.stringify(goals),
     );
-    await database.execAsync('COMMIT');
-  } catch (error) {
-    await database.execAsync('ROLLBACK');
-    throw error;
-  }
+  });
 }
 
 export async function getPreference(key: string): Promise<string | undefined> {
