@@ -1,13 +1,12 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { Directory, File, Paths } from 'expo-file-system';
-import { openDatabaseSync } from 'expo-sqlite';
+import { database, transaction } from './database';
 
 import type { BackupConversation, BackupMessage, BackupPhoto, CaloDoneBackup } from '../domain/backup';
 import { planBackupMerge } from '../domain/backup';
 import type { Meal, MealPhoto } from '../domain/meal';
 import { sanitizeChatMessage } from './chatRepository';
 
-const database = openDatabaseSync('calodone.db');
 
 export type BackupImportResult = {
   mealsImported: number;
@@ -51,11 +50,10 @@ export async function mergeCaloDoneBackup(backup: CaloDoneBackup): Promise<Backu
       restoredConversations.push({ conversation, messages, files: conversationFiles });
     }
 
-    await database.execAsync('BEGIN IMMEDIATE');
     let mealsImported = 0;
     let conversationsImported = 0;
     let photosImported = 0;
-    try {
+    await transaction(async (database) => {
       for (const meal of restoredMeals) {
         const result = await database.runAsync(
           `INSERT OR IGNORE INTO meals (
@@ -80,7 +78,7 @@ export async function mergeCaloDoneBackup(backup: CaloDoneBackup): Promise<Backu
         }
       }
 
-      await restorePreferences(backup);
+      await restorePreferences(database, backup);
 
       for (const restored of restoredConversations) {
         const { thread } = restored.conversation;
@@ -119,11 +117,7 @@ export async function mergeCaloDoneBackup(backup: CaloDoneBackup): Promise<Backu
           );
         }
       }
-      await database.execAsync('COMMIT');
-    } catch (error) {
-      await database.execAsync('ROLLBACK');
-      throw error;
-    }
+    });
 
     return {
       mealsImported,
@@ -138,7 +132,7 @@ export async function mergeCaloDoneBackup(backup: CaloDoneBackup): Promise<Backu
   }
 }
 
-async function restorePreferences(backup: CaloDoneBackup): Promise<void> {
+async function restorePreferences(database: typeof import('./database').database, backup: CaloDoneBackup): Promise<void> {
   const preferences = backup.preferences;
   const values: Array<[string, string]> = [];
   if (preferences.goals) values.push(['daily_goals', JSON.stringify(preferences.goals)]);

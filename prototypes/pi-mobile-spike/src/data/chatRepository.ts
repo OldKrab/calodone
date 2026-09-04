@@ -1,15 +1,13 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { Directory, File, Paths } from 'expo-file-system';
-import { openDatabaseSync } from 'expo-sqlite';
+import { database, transaction } from './database';
 
 import { newChatUserMessage, newMealQuestionMessage, type ChatAction, type ChatThread, type ChatUndo } from '../domain/chat';
 import { getMeal } from './mealRepository';
 
-const database = openDatabaseSync('calodone.db');
 
 type ThreadRow = { id: string; title: string; created_at: number; updated_at: number; meal_id?: string | null; purpose?: string | null };
 type MessageRow = { message_json: string };
-type CountRow = { count: number };
 type ActionRow = { id: string; thread_id: string; label: string; created_at: number; undone: number; undo_json: string };
 
 export async function initializeChat(): Promise<void> {
@@ -102,18 +100,22 @@ export async function syncMealQuestionsToThread(
 ): Promise<void> {
   const cleanQuestions = questions.map((question) => question.trim()).filter(Boolean);
   if (cleanQuestions.length === 0) return;
-  const messages = await loadChatMessages(threadId);
-  const existing = new Set(messages.flatMap((message) => message.role === 'mealQuestion' ? message.questions : []));
-  const unseen = cleanQuestions.filter((question) => !existing.has(question));
-  if (unseen.length === 0) return;
-  await saveChatMessages(threadId, [...messages, newMealQuestionMessage({ mealId, questions: unseen, timestamp })]);
+  await transaction(async (database) => {
+    const messages = await readMessages(database, threadId);
+    const existing = new Set(messages.flatMap((message) => message.role === 'mealQuestion' ? message.questions : []));
+    const unseen = cleanQuestions.filter((question) => !existing.has(question));
+    if (unseen.length === 0) return;
+    await writeMessages(database, threadId, [...messages, newMealQuestionMessage({ mealId, questions: unseen, timestamp })]);
+  });
 }
 
 export async function appendInlineMealAnswer(threadId: string, answer: string, timestamp = Date.now()): Promise<void> {
   const text = answer.trim();
   if (!text) return;
-  const messages = await loadChatMessages(threadId);
-  await saveChatMessages(threadId, [...messages, newChatUserMessage(text, timestamp)]);
+  await transaction(async (database) => {
+    const messages = await readMessages(database, threadId);
+    await writeMessages(database, threadId, [...messages, newChatUserMessage(text, timestamp)]);
+  });
 }
 
 export async function preferredMealThread(mealId: string, clarification: boolean): Promise<ChatThread | undefined> {
@@ -153,17 +155,12 @@ export async function touchChatThread(id: string): Promise<void> {
 export async function deleteChatThread(id: string): Promise<void> {
   const messages = await loadChatMessages(id);
   const actions = await listChatActions(id);
-  await database.execAsync('BEGIN IMMEDIATE');
-  try {
+  await transaction(async (database) => {
     await database.runAsync('DELETE FROM chat_messages WHERE thread_id = ?', id);
     await database.runAsync('DELETE FROM chat_actions WHERE thread_id = ?', id);
     await database.runAsync('DELETE FROM chat_tool_receipts WHERE thread_id = ?', id);
     await database.runAsync('DELETE FROM chat_threads WHERE id = ?', id);
-    await database.execAsync('COMMIT');
-  } catch (error) {
-    await database.execAsync('ROLLBACK');
-    throw error;
-  }
+  });
   for (const uri of attachmentUris(messages)) {
     try { new File(uri).delete(); } catch { /* The attachment may already be absent. */ }
   }
@@ -171,6 +168,10 @@ export async function deleteChatThread(id: string): Promise<void> {
 }
 
 export async function loadChatMessages(threadId: string): Promise<AgentMessage[]> {
+  return readMessages(database, threadId);
+}
+
+async function readMessages(database: typeof import('./database').database, threadId: string): Promise<AgentMessage[]> {
   const rows = await database.getAllAsync<MessageRow>(
     'SELECT message_json FROM chat_messages WHERE thread_id = ? ORDER BY position ASC',
     threadId,
@@ -181,33 +182,26 @@ export async function loadChatMessages(threadId: string): Promise<AgentMessage[]
 }
 
 export async function saveChatMessages(threadId: string, messages: AgentMessage[]): Promise<void> {
-  await database.execAsync('BEGIN IMMEDIATE');
-  try {
-    const existing = await database.getFirstAsync<CountRow>(
-      'SELECT COUNT(*) AS count FROM chat_messages WHERE thread_id = ?',
-      threadId,
+  await transaction((database) => writeMessages(database, threadId, messages));
+}
+
+async function writeMessages(database: typeof import('./database').database, threadId: string, messages: AgentMessage[]): Promise<void> {
+  // Only completed messages are persisted. Keep durable history and append unseen
+  // messages: the active agent snapshot may not include externally added questions.
+  // Compare the full payload, not timestamps alone (two messages can share a millisecond).
+  const existing = await readMessages(database, threadId);
+  const known = new Set(existing.map((message) => JSON.stringify(sanitizeChatMessage(message))));
+  let position = existing.length;
+  for (const message of messages) {
+    const json = JSON.stringify(sanitizeChatMessage(message));
+    if (known.has(json)) continue;
+    await database.runAsync(
+      'INSERT INTO chat_messages (thread_id, position, message_json) VALUES (?, ?, ?)',
+      threadId, position++, json,
     );
-    // Conversation history is append-only. A shorter snapshot can only come
-    // from a stale screen finishing after a newer session has already saved.
-    if ((existing?.count ?? 0) > messages.length) {
-      await database.execAsync('COMMIT');
-      return;
-    }
-    await database.runAsync('DELETE FROM chat_messages WHERE thread_id = ?', threadId);
-    for (const [position, message] of messages.entries()) {
-      await database.runAsync(
-        'INSERT INTO chat_messages (thread_id, position, message_json) VALUES (?, ?, ?)',
-        threadId,
-        position,
-        JSON.stringify(sanitizeChatMessage(message)),
-      );
-    }
-    await database.runAsync('UPDATE chat_threads SET updated_at = ? WHERE id = ?', Date.now(), threadId);
-    await database.execAsync('COMMIT');
-  } catch (error) {
-    await database.execAsync('ROLLBACK');
-    throw error;
+    known.add(json);
   }
+  await database.runAsync('UPDATE chat_threads SET updated_at = ? WHERE id = ?', Date.now(), threadId);
 }
 
 export async function recordChatAction(input: {
