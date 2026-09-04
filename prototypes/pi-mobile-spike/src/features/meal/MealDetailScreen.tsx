@@ -1,22 +1,31 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as MediaLibrary from 'expo-media-library/legacy';
+import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Image,
+  Modal,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { shouldStackFormFields } from '../../components/adaptiveScreen';
 import { IconButton, PrimaryButton } from '../../components/controls';
+import { useAppDialog } from '../../components/AppDialog';
+import { KeyboardSafeArea } from '../../components/KeyboardSafeArea';
 import { ScreenReveal } from '../../components/ScreenReveal';
-import { color, radius, space } from '../../design/tokens';
-import type { Meal, MealAnalysis, MealItem, MealType, NutritionTotals } from '../../domain/meal';
+import { color, radius, space, type } from '../../design/tokens';
+import { mealQuestions, type Meal, type MealAnalysis, type MealItem, type MealType, type NutritionTotals } from '../../domain/meal';
+import { displayEnergy, displayWeight, type NutritionUnits } from '../../domain/preferences';
 import { formatNumber, formatTime, t } from '../../i18n';
+import type { MealActivityStage } from '../../services/mealActivity';
 
 const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 const nutritionFields = ['calories', 'protein', 'carbs', 'fat'] as const;
@@ -24,34 +33,28 @@ type NutritionField = typeof nutritionFields[number];
 
 export function MealDetailScreen(props: {
   meal: Meal;
-  correcting: boolean;
+  activity?: MealActivityStage;
+  units: NutritionUnits;
+  initialEditing?: boolean;
   onBack: () => void;
-  onCorrect: (correction: string) => Promise<void>;
+  onAnswer: (answer: string) => Promise<void>;
   onDelete: () => void;
+  onAskAssistant: () => void;
   onSave: (capturedAt: number, analysis: MealAnalysis) => Promise<void>;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [correction, setCorrection] = useState('');
+  const dialog = useAppDialog();
+  const [editing, setEditing] = useState(Boolean(props.initialEditing));
   const [error, setError] = useState('');
   const [draft, setDraft] = useState<MealAnalysis | undefined>(props.meal.analysis);
   const [time, setTime] = useState(editableTime(props.meal.capturedAt));
+  const [clarificationAnswer, setClarificationAnswer] = useState('');
+  const [answering, setAnswering] = useState(false);
 
   useEffect(() => {
     if (editing) return;
     setDraft(props.meal.analysis ? JSON.parse(JSON.stringify(props.meal.analysis)) as MealAnalysis : undefined);
     setTime(editableTime(props.meal.capturedAt));
   }, [editing, props.meal.analysis, props.meal.capturedAt]);
-
-  const submitCorrection = async () => {
-    if (!correction.trim() || props.correcting) return;
-    setError('');
-    try {
-      await props.onCorrect(correction.trim());
-      setCorrection('');
-    } catch {
-      setError(t('correctionError'));
-    }
-  };
 
   const save = async () => {
     if (!draft) return;
@@ -74,14 +77,28 @@ export function MealDetailScreen(props: {
     }
   };
 
-  const confirmDelete = () => Alert.alert(
-    t('deleteConfirmTitle'),
-    t('deleteConfirmBody'),
-    [
-      { text: t('cancel'), style: 'cancel' },
-      { text: t('delete'), style: 'destructive', onPress: props.onDelete },
+  const submitClarification = async () => {
+    if (!clarificationAnswer.trim() || answering) return;
+    setAnswering(true);
+    setError('');
+    try {
+      await props.onAnswer(clarificationAnswer.trim());
+      setClarificationAnswer('');
+    } catch {
+      setError(t('notificationAnswerError'));
+    } finally {
+      setAnswering(false);
+    }
+  };
+
+  const confirmDelete = () => dialog.show({
+    title: t('deleteConfirmTitle'),
+    message: t('deleteConfirmBody'),
+    actions: [
+      { label: t('delete'), role: 'destructive', onPress: props.onDelete },
+      { label: t('cancel'), role: 'cancel' },
     ],
-  );
+  });
 
   if (!draft) {
     return (
@@ -89,25 +106,75 @@ export function MealDetailScreen(props: {
         <Header title={t('mealDetails')} onBack={props.onBack} />
         <View style={styles.loading}>
           <ActivityIndicator color={color.action} />
-          <Text style={styles.loadingText}>{t(props.meal.status === 'failed' ? 'failed' : 'analyzing')}</Text>
+          <Text style={styles.loadingText}>{props.meal.status === 'failed' ? t('failed') : activityLabel(props.activity)}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <KeyboardSafeArea>
       <ScreenReveal>
         <Header
-          action={editing ? undefined : { label: t('editManually'), onPress: () => setEditing(true) }}
-          title={editing ? t('editMeal') : t('mealDetails')}
-          onBack={editing ? () => { setEditing(false); setError(''); } : props.onBack}
+          actionLabel={t(editing ? 'cancel' : 'edit')}
+          title={t('reviewMeal')}
+          onAction={() => { setEditing((value) => !value); setError(''); }}
+          onBack={props.onBack}
         />
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={styles.scroll}
+        >
+
+        {!editing && mealQuestions(draft.clarification).length > 0 && (
+          <View style={styles.clarification}>
+            <Text style={styles.clarificationLabel}>{t('clarificationTitle')}</Text>
+            {mealQuestions(draft.clarification).map((question, index, questions) => (
+              <Text key={`${question}-${index}`} style={styles.clarificationQuestion}>
+                {questions.length > 1 ? `${index + 1}. ` : ''}{question}
+              </Text>
+            ))}
+            <View style={styles.clarificationRow}>
+              <TextInput
+                editable={!answering}
+                onChangeText={setClarificationAnswer}
+                onSubmitEditing={submitClarification}
+                placeholder={t('answerPlaceholder')}
+                placeholderTextColor={color.muted}
+                returnKeyType="send"
+                style={styles.clarificationInput}
+                value={clarificationAnswer}
+              />
+              <Pressable accessibilityRole="button" accessibilityLabel={t('answer')} disabled={!clarificationAnswer.trim() || answering} onPress={submitClarification} style={({ pressed }) => [styles.correctionSend, (!clarificationAnswer.trim() || answering) && styles.disabled, pressed && styles.pressed]}>
+                {answering ? <ActivityIndicator color={color.surface} size="small" /> : <Ionicons name="arrow-up" color={color.surface} size={21} />}
+              </Pressable>
+            </View>
+            <Pressable accessibilityRole="button" onPress={props.onAskAssistant} style={styles.answerInChat}>
+              <Ionicons name="chatbox-ellipses-outline" size={17} color={color.action} />
+              <Text style={styles.answerInChatText}>{t('answerInChat')}</Text>
+              <Ionicons name="chevron-forward" size={16} color={color.muted} />
+            </Pressable>
+            {answering && <Text style={styles.clarificationActivity}>{activityLabel(props.activity)}</Text>}
+          </View>
+        )}
+
         {editing ? (
-          <MealEditor draft={draft} time={time} onChange={setDraft} onTimeChange={setTime} />
+          <>
+            <Pressable accessibilityRole="button" onPress={props.onAskAssistant} style={styles.editWithAssistant}>
+              <View style={styles.editWithAssistantIcon}><Ionicons name="sparkles-outline" size={18} color={color.action} /></View>
+              <View style={styles.editWithAssistantCopy}>
+                <Text style={styles.editWithAssistantTitle}>{t('editWithAssistant')}</Text>
+                <Text style={styles.editWithAssistantHelp}>{t('editWithAssistantHelp')}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={17} color={color.muted} />
+            </Pressable>
+            <MealEditor draft={draft} time={time} onChange={setDraft} onTimeChange={setTime} />
+          </>
         ) : (
-          <MealOverview meal={props.meal} analysis={draft} />
+          <MealOverview meal={props.meal} analysis={draft} units={props.units} />
         )}
 
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
@@ -120,91 +187,164 @@ export function MealDetailScreen(props: {
             </Pressable>
           </View>
         ) : (
-          <View style={styles.correction}>
-            <View style={styles.correctionLabel}>
-              <Ionicons name="sparkles" size={15} color={color.action} />
-              <Text style={styles.correctionTitle}>{t('fixWithAI')}</Text>
-            </View>
-            <View style={styles.correctionRow}>
-              <TextInput
-                editable={!props.correcting}
-                onChangeText={setCorrection}
-                onSubmitEditing={submitCorrection}
-                placeholder={t('fixPlaceholder')}
-                placeholderTextColor={color.muted}
-                returnKeyType="send"
-                style={styles.correctionInput}
-                value={correction}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('fixWithAI')}
-                disabled={!correction.trim() || props.correcting}
-                onPress={submitCorrection}
-                style={({ pressed }) => [
-                  styles.correctionSend,
-                  (!correction.trim() || props.correcting) && styles.disabled,
-                  pressed && styles.pressed,
-                ]}
-              >
-                {props.correcting
-                  ? <ActivityIndicator color={color.surface} size="small" />
-                  : <Ionicons name="arrow-up" color={color.surface} size={21} />}
-              </Pressable>
-            </View>
-          </View>
+          <Pressable accessibilityRole="button" onPress={props.onAskAssistant} style={styles.assistantAction}>
+            <Ionicons name="chatbox-ellipses-outline" size={19} color={color.action} />
+            <Text style={styles.assistantActionText}>{t(draft.clarification ? 'discussInAssistant' : 'askAssistant')}</Text>
+            <Ionicons name="chevron-forward" size={17} color={color.muted} />
+          </Pressable>
         )}
         </ScrollView>
       </ScreenReveal>
-    </SafeAreaView>
+    </KeyboardSafeArea>
   );
+}
+
+function activityLabel(stage?: MealActivityStage): string {
+  if (stage === 'reading_photos') return t('readingMealPhotos');
+  if (stage === 'reviewing_meal') return t('reviewingMeal');
+  if (stage === 'thinking') return t('assistantWorking');
+  if (stage === 'web_search') return t('toolWebSearch');
+  if (stage === 'writing_result') return t('writingMealResult');
+  if (stage === 'saving_result') return t('savingMealResult');
+  return t('analyzing');
 }
 
 function Header(props: {
   title: string;
   onBack: () => void;
-  action?: { label: string; onPress: () => void };
+  actionLabel?: string;
+  onAction?: () => void;
 }) {
   return (
     <View style={styles.header}>
-      <IconButton icon="arrow-back" label={t('back')} onPress={props.onBack} />
-      <Text style={styles.headerTitle}>{props.title}</Text>
-      {props.action ? (
-        <Pressable accessibilityRole="button" onPress={props.action.onPress} hitSlop={10}>
-          <Text style={styles.headerAction}>{props.action.label}</Text>
-        </Pressable>
-      ) : <View style={styles.headerSpacer} />}
+      <View style={styles.headerSide}><IconButton icon="arrow-back" label={t('back')} onPress={props.onBack} /></View>
+      <Text adjustsFontSizeToFit minimumFontScale={0.86} numberOfLines={1} style={styles.headerTitle}>{props.title}</Text>
+      {props.actionLabel && props.onAction ? (
+        <View style={[styles.headerSide, styles.headerSideEnd]}><Pressable accessibilityRole="button" hitSlop={6} onPress={props.onAction} style={styles.headerActionButton}>
+          <Text numberOfLines={1} style={styles.headerAction}>{props.actionLabel}</Text>
+        </Pressable></View>
+      ) : <View style={styles.headerSide} />}
     </View>
   );
 }
 
-function MealOverview(props: { meal: Meal; analysis: MealAnalysis }) {
+function MealOverview(props: { meal: Meal; analysis: MealAnalysis; units: NutritionUnits }) {
+  const dialog = useAppDialog();
+  const { fontScale, width } = useWindowDimensions();
+  const compact = shouldStackFormFields(width, fontScale) || width < 430;
+  const [openPhoto, setOpenPhoto] = useState<string>();
+  const photoWidth = Math.max(240, width - (space.md * 4));
+
+  const savePhoto = async (uri: string) => {
+    try {
+      const permission = await MediaLibrary.requestPermissionsAsync(true, ['photo']);
+      if (!permission.granted) throw new Error('Photo access denied');
+      await MediaLibrary.saveToLibraryAsync(uri);
+      dialog.show({ title: t('photoSaved'), message: t('photoSavedBody'), actions: [{ label: t('close'), role: 'cancel' }] });
+    } catch {
+      dialog.show({ title: t('photoActions'), message: t('photoSaveError'), actions: [{ label: t('close'), role: 'cancel' }] });
+    }
+  };
+
+  const sharePhoto = async (uri: string) => {
+    try {
+      if (!await Sharing.isAvailableAsync()) {
+        dialog.show({ title: t('photoActions'), message: t('shareUnavailable'), actions: [{ label: t('close'), role: 'cancel' }] });
+        return;
+      }
+      await Sharing.shareAsync(uri, { mimeType: 'image/jpeg' });
+    } catch {
+      dialog.show({ title: t('photoActions'), message: t('shareUnavailable'), actions: [{ label: t('close'), role: 'cancel' }] });
+    }
+  };
+
+  const showPhotoActions = (uri: string) => {
+    dialog.show({ title: t('photoActions'), actions: [
+      { label: t('savePhoto'), onPress: () => void savePhoto(uri) },
+      { label: t('sharePhoto'), onPress: () => void sharePhoto(uri) },
+      { label: t('cancel'), role: 'cancel' },
+    ] });
+  };
+
   return (
     <>
-      <Text style={styles.mealType}>{t(props.analysis.mealType)} · {formatTime(props.meal.capturedAt)}</Text>
-      <Text style={styles.title}>{props.analysis.title}</Text>
-      <View style={styles.totalRow}>
-        <Text style={styles.totalCalories}>{formatNumber(props.analysis.totals.calories)} {t('kcal')}</Text>
-        <Text style={styles.totalMacros}>
-          {t('proteinShort')} {formatNumber(props.analysis.totals.protein)} · {t('carbsShort')} {formatNumber(props.analysis.totals.carbs)} · {t('fatShort')} {formatNumber(props.analysis.totals.fat)}
-        </Text>
-      </View>
-      <View style={styles.items}>
-        {props.analysis.items.map((item, index) => (
-          <View key={`${item.name}-${index}`} style={[styles.itemRow, index > 0 && styles.divider]}>
-            <View style={styles.itemCopy}>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemQuantity}>{item.quantity}</Text>
+      {props.meal.photos.length > 0 && (
+        <ScrollView
+          horizontal
+          contentContainerStyle={styles.photoGallery}
+          decelerationRate="fast"
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={photoWidth + space.sm}
+        >
+          {props.meal.photos.map((photo, index) => (
+            <Pressable
+              key={`${photo.uri}-${index}`}
+              accessibilityRole="imagebutton"
+              accessibilityLabel={`${t('mealPhoto')} ${index + 1}`}
+              accessibilityHint={t('photoActions')}
+              delayLongPress={350}
+              onLongPress={() => showPhotoActions(photo.uri)}
+              onPress={() => setOpenPhoto(photo.uri)}
+            >
+              <Image source={{ uri: photo.uri }} resizeMode="cover" style={[styles.mealPhoto, { width: photoWidth }]} />
+              {props.meal.photos.length > 1 && (
+                <View style={styles.photoIndex}><Text style={styles.photoIndexText}>{index + 1}/{props.meal.photos.length}</Text></View>
+              )}
+            </Pressable>
+          ))}
+        </ScrollView>
+      )}
+
+      {props.meal.note.trim() && (
+        <View style={styles.noteBlock}>
+          <Text style={styles.noteLabel}>{t('yourNote')}</Text>
+          <Text style={styles.noteText}>{props.meal.note.trim()}</Text>
+        </View>
+      )}
+
+      <View style={styles.detailTicket}>
+        <Text style={styles.mealType}>{t(props.analysis.mealType)} · {formatTime(props.meal.capturedAt)}</Text>
+        <Text style={styles.title}>{props.analysis.title}</Text>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalCalories}>{formatNumber(displayEnergy(props.analysis.totals.calories, props.units))} {energyUnit(props.units)}</Text>
+          <Text style={styles.totalMacros}>
+            {t('proteinShort')} {formatMacro(props.analysis.totals.protein, props.units)} · {t('carbsShort')} {formatMacro(props.analysis.totals.carbs, props.units)} · {t('fatShort')} {formatMacro(props.analysis.totals.fat, props.units)}
+          </Text>
+        </View>
+        <View style={styles.items}>
+          {props.analysis.items.map((item, index) => (
+            <View key={`${item.name}-${index}`} style={[styles.itemRow, compact && styles.itemRowCompact, index > 0 && styles.divider]}>
+              <View style={styles.itemCopy}>
+                <Text style={styles.itemName}>{item.name}</Text>
+                <Text style={styles.itemQuantity}>{item.quantity}</Text>
+              </View>
+              <View style={[styles.itemNutrition, compact && styles.itemNutritionCompact]}>
+                <Text style={styles.itemCalories}>{formatNumber(displayEnergy(item.calories, props.units))} {energyUnit(props.units)}</Text>
+                <Text style={styles.itemMacros}>
+                  {t('proteinShort')} {formatMacro(item.protein, props.units)} · {t('carbsShort')} {formatMacro(item.carbs, props.units)} · {t('fatShort')} {formatMacro(item.fat, props.units)}
+                </Text>
+              </View>
             </View>
-            <View style={styles.itemNutrition}>
-              <Text style={styles.itemCalories}>{formatNumber(item.calories)} {t('kcal')}</Text>
-              <Text style={styles.itemMacros}>
-                {t('proteinShort')} {formatNumber(item.protein)} · {t('carbsShort')} {formatNumber(item.carbs)} · {t('fatShort')} {formatNumber(item.fat)}
-              </Text>
-            </View>
-          </View>
-        ))}
+          ))}
+        </View>
       </View>
+
+      <Modal animationType="fade" onRequestClose={() => setOpenPhoto(undefined)} transparent visible={Boolean(openPhoto)}>
+        <SafeAreaView style={styles.photoModal}>
+          <IconButton icon="close" inverted label={t('close')} onPress={() => setOpenPhoto(undefined)} />
+          {openPhoto && (
+            <Pressable
+              accessibilityRole="imagebutton"
+              accessibilityHint={t('photoActions')}
+              delayLongPress={350}
+              onLongPress={() => showPhotoActions(openPhoto)}
+              style={styles.fullPhoto}
+            >
+              <Image source={{ uri: openPhoto }} resizeMode="contain" style={styles.fullPhotoImage} />
+            </Pressable>
+          )}
+        </SafeAreaView>
+      </Modal>
     </>
   );
 }
@@ -215,6 +355,8 @@ function MealEditor(props: {
   onChange: (analysis: MealAnalysis) => void;
   onTimeChange: (time: string) => void;
 }) {
+  const { fontScale, width } = useWindowDimensions();
+  const compact = shouldStackFormFields(width, fontScale) || width < 430;
   const updateItem = (index: number, field: keyof MealItem, value: string) => {
     const items = props.draft.items.map((item, itemIndex) => {
       if (itemIndex !== index) return item;
@@ -252,9 +394,9 @@ function MealEditor(props: {
           </Pressable>
         ))}
       </View>
-      <View style={styles.topFields}>
+      <View style={[styles.topFields, compact && styles.topFieldsCompact]}>
         <Field label={t('itemName')} value={props.draft.title} onChange={(title) => props.onChange({ ...props.draft, title })} />
-        <Field keyboard="numbers-and-punctuation" label={t('time')} value={props.time} onChange={props.onTimeChange} compact />
+        <Field keyboard="numbers-and-punctuation" label={t('time')} value={props.time} onChange={props.onTimeChange} fixed={!compact} />
       </View>
 
       <Text style={styles.itemsHeading}>{t('items')}</Text>
@@ -268,17 +410,18 @@ function MealEditor(props: {
               </Pressable>
             )}
           </View>
-          <View style={styles.topFields}>
+          <View style={[styles.topFields, compact && styles.topFieldsCompact]}>
             <Field label={t('itemName')} value={item.name} onChange={(value) => updateItem(index, 'name', value)} />
             <Field label={t('quantity')} value={item.quantity} onChange={(value) => updateItem(index, 'quantity', value)} />
           </View>
-          <View style={styles.nutritionFields}>
+          <View style={[styles.nutritionFields, compact && styles.nutritionFieldsCompact]}>
             {nutritionFields.map((field) => (
               <Field
                 key={field}
-                compact
                 keyboard="decimal-pad"
                 label={field === 'calories' ? t('caloriesField') : t(`${field}Short` as 'proteinShort')}
+                nutrition
+                stacked={compact}
                 value={String(item[field])}
                 onChange={(value) => updateItem(index, field, value)}
               />
@@ -299,17 +442,21 @@ function Field(props: {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  compact?: boolean;
+  fixed?: boolean;
+  nutrition?: boolean;
+  stacked?: boolean;
   keyboard?: 'default' | 'decimal-pad' | 'numbers-and-punctuation';
 }) {
   return (
-    <View style={[styles.field, props.compact && styles.fieldCompact]}>
+    <View style={[styles.field, props.fixed && styles.fieldFixed, props.nutrition && styles.fieldNutrition, props.stacked && styles.fieldStacked]}>
       <Text style={styles.fieldLabel}>{props.label}</Text>
       <TextInput
         keyboardType={props.keyboard ?? 'default'}
+        multiline={!props.nutrition && props.keyboard !== 'numbers-and-punctuation'}
         onChangeText={props.onChange}
         placeholderTextColor={color.muted}
-        style={styles.fieldInput}
+        style={[styles.fieldInput, !props.nutrition && props.keyboard !== 'numbers-and-punctuation' && styles.fieldInputMultiline]}
+        textAlignVertical="center"
         value={props.value}
       />
     </View>
@@ -330,53 +477,100 @@ function editableTime(timestamp: number): string {
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
+function energyUnit(units: NutritionUnits): string {
+  return units.energy === 'kj' ? t('kilojoules') : t('kcal');
+}
+
+function formatMacro(grams: number, units: NutritionUnits): string {
+  return `${formatNumber(displayWeight(grams, units), units.weight === 'oz' ? 1 : 0)} ${units.weight === 'oz' ? t('ounces') : t('grams')}`;
+}
+
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: color.canvas, flex: 1 },
-  header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingTop: space.sm },
-  headerTitle: { color: color.ink, fontSize: 17, fontWeight: '700' },
-  headerAction: { color: color.action, fontSize: 13, fontWeight: '700', maxWidth: 110, textAlign: 'right' },
-  headerSpacer: { width: 48 },
-  content: { paddingBottom: 48, paddingHorizontal: space.lg, paddingTop: space.xl },
+  scroll: { flex: 1 },
+  header: { alignItems: 'center', flexDirection: 'row', height: 64, justifyContent: 'space-between', paddingHorizontal: space.md },
+  headerSide: { alignItems: 'flex-start', width: 88 },
+  headerSideEnd: { alignItems: 'flex-end' },
+  headerTitle: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 20, textAlign: 'center' },
+  headerActionButton: { alignItems: 'flex-end', justifyContent: 'center', minHeight: 48, maxWidth: 88 },
+  headerAction: { color: color.action, fontFamily: type.ticketBold, fontSize: 15, textAlign: 'right' },
+  content: { paddingBottom: 48, paddingHorizontal: space.md, paddingTop: space.sm },
   loading: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   loadingText: { color: color.muted, fontSize: 14, marginTop: space.sm },
-  mealType: { color: color.action, fontSize: 13, fontWeight: '700' },
-  title: { color: color.ink, fontSize: 28, fontWeight: '700', letterSpacing: -0.6, marginTop: 5 },
+  photoGallery: { gap: space.sm, paddingBottom: space.md },
+  mealPhoto: { backgroundColor: color.camera, borderRadius: radius.image, height: 245 },
+  photoIndex: { backgroundColor: color.cameraChrome, borderRadius: radius.round, bottom: space.sm, paddingHorizontal: 9, paddingVertical: 5, position: 'absolute', right: space.sm },
+  photoIndexText: { color: color.cameraText, fontFamily: type.ticketBold, fontSize: 12 },
+  noteBlock: { borderLeftColor: color.action, borderLeftWidth: 2, marginBottom: space.md, paddingHorizontal: 12, paddingVertical: 2 },
+  noteLabel: { color: color.action, fontFamily: type.ticketBold, fontSize: 13, letterSpacing: 0.5 },
+  noteText: { color: color.ink, fontSize: 15, lineHeight: 21, marginTop: 3 },
+  photoModal: { backgroundColor: color.camera, flex: 1, padding: space.md },
+  fullPhoto: { flex: 1, width: '100%' },
+  fullPhotoImage: { height: '100%', width: '100%' },
+  detailTicket: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, padding: space.md },
+  mealType: { color: color.muted, fontFamily: type.ticket, fontSize: 14 },
+  title: { color: color.ink, fontFamily: type.ticketBold, fontSize: 31, lineHeight: 32, marginTop: 4 },
   totalRow: { marginTop: space.lg },
-  totalCalories: { color: color.ink, fontSize: 19, fontWeight: '700' },
+  totalCalories: { color: color.ink, fontFamily: type.ticketBold, fontSize: 23 },
   totalMacros: { color: color.muted, fontSize: 13, marginTop: 4 },
   items: { marginTop: space.xl },
-  itemRow: { alignItems: 'flex-start', flexDirection: 'row', gap: space.md, paddingVertical: space.md },
-  divider: { borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth },
+  itemRow: { alignItems: 'flex-start', flexDirection: 'row', gap: space.md, paddingVertical: 13 },
+  itemRowCompact: { flexDirection: 'column', gap: space.sm },
+  divider: { borderTopColor: color.line, borderTopWidth: 1, borderStyle: 'dashed' },
   itemCopy: { flex: 1 },
   itemName: { color: color.ink, fontSize: 16, fontWeight: '600' },
   itemQuantity: { color: color.muted, fontSize: 13, marginTop: 3 },
-  itemNutrition: { alignItems: 'flex-end' },
+  itemNutrition: { alignItems: 'flex-end', flexShrink: 1, maxWidth: '52%' },
+  itemNutritionCompact: { alignItems: 'flex-start', maxWidth: '100%' },
   itemCalories: { color: color.ink, fontSize: 14, fontWeight: '600' },
-  itemMacros: { color: color.muted, fontSize: 11, marginTop: 4 },
-  correction: { backgroundColor: color.surface, borderRadius: radius.surface, marginTop: space.xl, padding: 18 },
-  correctionLabel: { alignItems: 'center', flexDirection: 'row', gap: 7 },
-  correctionTitle: { color: color.ink, fontSize: 14, fontWeight: '700' },
+  itemMacros: { color: color.muted, flexShrink: 1, fontSize: 11, marginTop: 4, textAlign: 'right' },
+  assistantAction: { alignItems: 'center', borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: space.sm, marginTop: space.lg, minHeight: 52, paddingHorizontal: space.xs },
+  assistantActionText: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 17 },
+  editWithAssistant: { alignItems: 'center', backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: space.sm, marginBottom: space.lg, minHeight: 72, padding: space.sm },
+  editWithAssistantIcon: { alignItems: 'center', backgroundColor: color.surfacePressed, borderRadius: radius.control, height: 42, justifyContent: 'center', width: 42 },
+  editWithAssistantCopy: { flex: 1, minWidth: 0 },
+  editWithAssistantTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 17 },
+  editWithAssistantHelp: { color: color.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  clarification: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderStyle: 'dashed', borderWidth: 1, marginBottom: space.md, padding: space.md },
+  clarificationLabel: { color: color.pending, fontFamily: type.ticketBold, fontSize: 14, letterSpacing: 0.4 },
+  clarificationQuestion: { color: color.ink, fontSize: 17, fontWeight: '600', lineHeight: 23, marginTop: space.sm },
+  clarificationRow: { alignItems: 'center', flexDirection: 'row', gap: space.sm, marginTop: space.md },
+  clarificationInput: { backgroundColor: color.canvas, borderRadius: radius.control, color: color.ink, flex: 1, fontSize: 15, height: 50, paddingHorizontal: 14 },
+  answerInChat: { alignItems: 'center', borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: space.sm, marginTop: space.md, minHeight: 42, paddingTop: space.sm },
+  answerInChatText: { color: color.action, flex: 1, fontFamily: type.ticketBold, fontSize: 14 },
+  clarificationActivity: { color: color.muted, fontSize: 12, marginTop: space.sm },
+  correctionToggle: { borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', marginTop: space.lg, minHeight: 50, paddingHorizontal: space.md },
+  correctionToggleText: { color: color.action, fontFamily: type.ticketBold, fontSize: 16, textAlign: 'center' },
+  correction: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderStyle: 'dashed', borderWidth: 1, marginTop: space.sm, padding: space.md },
+  correctionLabel: { gap: 3 },
+  correctionTitle: { color: color.action, fontFamily: type.ticketBold, fontSize: 16, letterSpacing: 0.4 },
+  correctionHelp: { color: color.muted, fontSize: 12, lineHeight: 17 },
   correctionRow: { alignItems: 'center', flexDirection: 'row', gap: space.sm, marginTop: space.md },
   correctionInput: { backgroundColor: color.canvas, borderRadius: radius.control, color: color.ink, flex: 1, fontSize: 15, height: 50, paddingHorizontal: 14 },
-  correctionSend: { alignItems: 'center', backgroundColor: color.action, borderRadius: radius.round, height: 46, justifyContent: 'center', width: 46 },
+  correctionSend: { alignItems: 'center', backgroundColor: color.action, borderRadius: radius.control, height: 48, justifyContent: 'center', width: 48 },
   disabled: { opacity: 0.38 },
   pressed: { backgroundColor: color.actionPressed, transform: [{ scale: 0.95 }] },
   error: { color: color.error, fontSize: 13, marginTop: space.md },
   fieldLabel: { color: color.muted, fontSize: 12, fontWeight: '600', marginBottom: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.lg },
-  chip: { backgroundColor: color.surface, borderRadius: radius.round, justifyContent: 'center', minHeight: 48, paddingHorizontal: 14 },
+  chip: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', minHeight: 48, paddingHorizontal: 14 },
   chipSelected: { backgroundColor: color.ink },
-  chipText: { color: color.ink, fontSize: 13, fontWeight: '600' },
+  chipText: { color: color.ink, fontFamily: type.ticket, fontSize: 15 },
   chipTextSelected: { color: color.surface },
   topFields: { flexDirection: 'row', gap: space.sm },
-  field: { flex: 1 },
-  fieldCompact: { minWidth: 68 },
-  fieldInput: { backgroundColor: color.surface, borderRadius: radius.control, color: color.ink, fontSize: 14, height: 48, paddingHorizontal: 13 },
-  itemsHeading: { color: color.ink, fontSize: 18, fontWeight: '700', marginBottom: space.md, marginTop: space.xl },
-  itemEditor: { backgroundColor: color.surface, borderRadius: radius.surface, marginBottom: space.md, padding: space.md },
+  topFieldsCompact: { flexDirection: 'column' },
+  field: { flex: 1, minWidth: 0 },
+  fieldFixed: { flex: 0, width: 112 },
+  fieldNutrition: { flexBasis: '47%', minWidth: 112 },
+  fieldStacked: { flexBasis: '47%' },
+  fieldInput: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.control, borderWidth: 1, color: color.ink, fontSize: 15, minHeight: 50, minWidth: 0, paddingHorizontal: 13, width: '100%' },
+  fieldInputMultiline: { minHeight: 56, paddingVertical: 10 },
+  itemsHeading: { color: color.ink, fontFamily: type.ticketBold, fontSize: 22, marginBottom: space.md, marginTop: space.xl },
+  itemEditor: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, marginBottom: space.md, padding: space.md },
   itemEditorHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: space.sm },
   itemIndex: { color: color.muted, fontSize: 12, fontWeight: '700' },
-  nutritionFields: { flexDirection: 'row', gap: 6, marginTop: space.sm },
+  nutritionFields: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
+  nutritionFieldsCompact: { flexWrap: 'wrap' },
   addItem: { alignItems: 'center', flexDirection: 'row', gap: 7, minHeight: 48 },
   addItemText: { color: color.action, fontSize: 14, fontWeight: '700' },
   editorTotal: { color: color.ink, fontSize: 15, fontWeight: '700', marginTop: space.lg },

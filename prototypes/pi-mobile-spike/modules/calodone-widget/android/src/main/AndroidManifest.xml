@@ -2,6 +2,7 @@
   <application>
     <receiver
       android:name="dev.calodone.widget.CaloDoneWidgetProvider"
+      android:label="@string/calodone_widget_label"
       android:exported="false">
       <intent-filter>
         <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

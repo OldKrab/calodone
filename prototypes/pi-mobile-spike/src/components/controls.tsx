@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
+import { forwardRef } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { color, radius, space } from '../design/tokens';
+import { color, radius, space, type } from '../design/tokens';
 
 export function PrimaryButton(props: {
   label: string;
@@ -36,17 +37,18 @@ export function PrimaryButton(props: {
   );
 }
 
-export function IconButton(props: {
+export const IconButton = forwardRef<View, {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
   onPress: () => void;
   inverted?: boolean;
   selected?: boolean;
   disabled?: boolean;
-}) {
+}>(function IconButton(props, ref) {
   const foreground = props.inverted ? color.cameraText : color.ink;
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={props.label}
       accessibilityState={{ selected: props.selected }}
@@ -64,27 +66,27 @@ export function IconButton(props: {
       <Ionicons name={props.icon} size={23} color={foreground} />
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   primary: {
     alignItems: 'center',
     backgroundColor: color.action,
-    borderRadius: radius.round,
+    borderRadius: radius.control,
     height: 56,
     justifyContent: 'center',
     paddingHorizontal: space.lg,
     shadowColor: color.ink,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.14,
-    shadowRadius: 18,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.18,
+    shadowRadius: 5,
+    elevation: 3,
   },
   primaryDark: { shadowColor: color.camera },
-  primaryText: { color: color.surface, fontSize: 17, fontWeight: '700', letterSpacing: -0.1 },
+  primaryText: { color: color.surface, fontFamily: type.ticketBold, fontSize: 19, letterSpacing: 0.25 },
   buttonContent: { alignItems: 'center', flexDirection: 'row', gap: 9 },
   disabled: { opacity: 0.45 },
-  pressed: { backgroundColor: color.actionPressed, transform: [{ scale: 0.97 }] },
+  pressed: { backgroundColor: color.actionPressed, transform: [{ translateY: 1 }] },
   iconButton: {
     alignItems: 'center',
     borderRadius: radius.round,
@@ -93,6 +95,6 @@ const styles = StyleSheet.create({
     width: 48,
   },
   iconButtonInverted: { backgroundColor: color.cameraChrome },
-  iconButtonSelected: { backgroundColor: 'rgba(229, 111, 61, 0.42)' },
+  iconButtonSelected: { backgroundColor: 'rgba(182, 66, 46, 0.42)' },
   iconPressed: { opacity: 0.72, transform: [{ scale: 0.94 }] },
 });

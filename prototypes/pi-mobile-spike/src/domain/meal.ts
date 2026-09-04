@@ -1,3 +1,8 @@
+import { normalizeMealAnalysis } from './mealOperations';
+import { normalizeClarification, type LegacyMealClarification, type MealClarification } from './mealQuestions';
+
+export { mealQuestions } from './mealQuestions';
+
 export type MealStatus = 'queued' | 'analyzing' | 'needs_input' | 'complete' | 'estimated' | 'failed';
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
@@ -15,13 +20,20 @@ export type MealAnalysis = {
   mealType: MealType;
   items: MealItem[];
   totals: NutritionTotals;
-  clarification?: { question: string; impactCalories: number };
+  clarification?: MealClarification | LegacyMealClarification;
 };
 
-export type MealPhoto = { uri: string; mimeType: string };
+export type MealPhoto = {
+  id: string;
+  uri: string;
+  mimeType: string;
+  createdAt: number;
+};
 
 export type Meal = {
   id: string;
+  /** Monotonic record version used to reject stale Assistant mutations. */
+  revision: number;
   capturedAt: number;
   status: MealStatus;
   note: string;
@@ -59,6 +71,7 @@ export function totalsFor(meals: Meal[]): NutritionTotals {
 export function parseMealAnalysis(text: string): MealAnalysis {
   const normalized = text.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
   const value = JSON.parse(normalized) as Partial<MealAnalysis>;
+  const clarification = normalizeClarification(value.clarification);
   if (
     typeof value.title !== 'string' ||
     !['breakfast', 'lunch', 'dinner', 'snack'].includes(value.mealType ?? '') ||
@@ -70,14 +83,11 @@ export function parseMealAnalysis(text: string): MealAnalysis {
       typeof item?.quantity === 'string' &&
       validTotals(item)
     )) ||
-    (value.clarification !== undefined && (
-      typeof value.clarification?.question !== 'string' ||
-      !validNumber(value.clarification?.impactCalories)
-    ))
+    (value.clarification !== undefined && !clarification)
   ) {
     throw new Error('The model returned an invalid meal result');
   }
-  return value as MealAnalysis;
+  return normalizeMealAnalysis({ ...value, clarification } as MealAnalysis);
 }
 
 function validTotals(value: Partial<NutritionTotals>): boolean {

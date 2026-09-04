@@ -5,16 +5,27 @@ import { AppState, Platform } from 'react-native';
 import { analyzeMealPhotos, correctMealAnalysis, refineMealAnalysis } from '../ai/piClient';
 import {
   getMeal,
+  getPreference,
   listProcessableMeals,
   recordMealFailure,
   saveMealAnalysis,
+  savePreference,
   setMealStatus,
 } from '../data/mealRepository';
+import { appendInlineMealAnswer, ensureClarificationThread, syncMealQuestionsToThread } from '../data/chatRepository';
+import { mealQuestions } from '../domain/meal';
 import type { MealAnalysis } from '../domain/meal';
 import { parseMealAnalysis } from '../domain/meal';
+import {
+  defaultNotificationPreferences,
+  parsePreference,
+  type NotificationPreferences,
+} from '../domain/preferences';
 import { locale, t } from '../i18n';
+import { setMealActivity } from './mealActivity';
 
 const processing = new Set<string>();
+const REMINDER_ID_KEY = 'daily_reminder_notification_id';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -47,11 +58,43 @@ export async function prepareMealNotifications(): Promise<void> {
   }
 }
 
+async function notificationPreferences(): Promise<NotificationPreferences> {
+  return parsePreference(await getPreference('notification_preferences'), defaultNotificationPreferences);
+}
+
+export async function applyNotificationPreferences(
+  preferences: NotificationPreferences,
+  hasMealsToday = false,
+): Promise<void> {
+  await prepareMealNotifications();
+  const existingId = await getPreference(REMINDER_ID_KEY);
+  if (existingId) {
+    await Notifications.cancelScheduledNotificationAsync(existingId).catch(() => undefined);
+    await savePreference(REMINDER_ID_KEY, '');
+  }
+  if (!preferences.reminder) return;
+
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(20, 0, 0, 0);
+  if (hasMealsToday || target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+  const identifier = await Notifications.scheduleNotificationAsync({
+    content: {
+      title: t('reminderNotificationTitle'),
+      body: t('reminderNotificationBody'),
+    },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: target },
+  });
+  await savePreference(REMINDER_ID_KEY, identifier);
+}
+
 async function notifyResult(mealId: string, analysis: MealAnalysis): Promise<void> {
   if (AppState.currentState === 'active') return;
   const permission = await Notifications.getPermissionsAsync();
   if (!permission.granted) return;
-  const question = analysis.clarification?.question;
+  const question = mealQuestions(analysis.clarification)[0];
+  const preferences = await notificationPreferences();
+  if (question ? !preferences.questions : !preferences.ready) return;
   await Notifications.scheduleNotificationAsync({
     content: {
       title: question ? t('notificationQuestionTitle') : t('notificationReadyTitle'),
@@ -63,15 +106,20 @@ async function notifyResult(mealId: string, analysis: MealAnalysis): Promise<voi
   });
 }
 
-function removePrivatePhotos(uris: string[]): void {
-  for (const uri of uris) {
-    try {
-      const file = new File(uri);
-      if (file.exists) file.delete();
-    } catch {
-      // Cleanup is best effort. Expo may already have evicted a cache file.
-    }
-  }
+async function notifyFailure(mealId: string): Promise<void> {
+  if (AppState.currentState === 'active') return;
+  const preferences = await notificationPreferences();
+  if (!preferences.failed) return;
+  const permission = await Notifications.getPermissionsAsync();
+  if (!permission.granted) return;
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: t('failedNotificationTitle'),
+      body: t('failedNotificationBody'),
+      data: { mealId },
+    },
+    trigger: null,
+  });
 }
 
 export async function processMeal(id: string): Promise<void> {
@@ -81,22 +129,33 @@ export async function processMeal(id: string): Promise<void> {
     const meal = await getMeal(id);
     if (!meal || meal.photos.length === 0) throw new Error('Meal photos are unavailable');
     await setMealStatus(id, 'analyzing');
+    setMealActivity(id, 'reading_photos');
     const photos = await Promise.all(meal.photos.map(async (photo) => ({
       base64: await new File(photo.uri).base64(),
       mimeType: photo.mimeType,
     })));
+    setMealActivity(id, 'reviewing_meal');
     const result = await analyzeMealPhotos({
+      mealId: id,
       photos,
       note: meal.note,
       language: locale === 'ru' ? 'Russian' : 'English',
+      onActivity: (activity) => setMealActivity(id, activity),
     });
     const analysis = parseMealAnalysis(result.text);
+    setMealActivity(id, 'saving_result');
     await saveMealAnalysis(id, analysis);
-    removePrivatePhotos(meal.photos.map((photo) => photo.uri));
+    const questions = mealQuestions(analysis.clarification);
+    if (questions.length > 0) {
+      const thread = await ensureClarificationThread(id, analysis.title);
+      await syncMealQuestionsToThread(thread.id, id, questions);
+    }
     await notifyResult(id, analysis);
   } catch (error) {
-    await recordMealFailure(id, error instanceof Error ? error.message : String(error));
+    const terminal = await recordMealFailure(id, error instanceof Error ? error.message : String(error));
+    if (terminal) await notifyFailure(id);
   } finally {
+    setMealActivity(id);
     processing.delete(id);
   }
 }
@@ -106,22 +165,35 @@ export async function processPendingMeals(): Promise<void> {
   for (const meal of meals) await processMeal(meal.id);
 }
 
-export async function answerMealClarification(id: string, answer: string): Promise<void> {
+export async function answerMealClarification(id: string, answer: string, answeredInThreadId?: string): Promise<void> {
   const meal = await getMeal(id);
   const clarification = meal?.analysis?.clarification;
   if (!meal?.analysis || !clarification) return;
 
+  const questions = mealQuestions(clarification);
+  const thread = await ensureClarificationThread(id, meal.analysis.title);
+  await syncMealQuestionsToThread(thread.id, id, questions, meal.capturedAt);
+  if (!answeredInThreadId) await appendInlineMealAnswer(thread.id, answer);
+
   await setMealStatus(id, 'analyzing');
   try {
+    setMealActivity(id, 'reviewing_meal');
     const result = await refineMealAnalysis({
+      mealId: id,
       previousJson: JSON.stringify(meal.analysis),
-      question: clarification.question,
+      question: questions.join('\n'),
       answer,
       language: locale === 'ru' ? 'Russian' : 'English',
+      onActivity: (activity) => setMealActivity(id, activity),
     });
     const analysis = parseMealAnalysis(result.text);
-    delete analysis.clarification;
+    setMealActivity(id, 'saving_result');
     await saveMealAnalysis(id, analysis);
+    const remainingQuestions = mealQuestions(analysis.clarification);
+    if (remainingQuestions.length > 0) {
+      const thread = await ensureClarificationThread(id, analysis.title);
+      await syncMealQuestionsToThread(thread.id, id, remainingQuestions);
+    }
   } catch (error) {
     await setMealStatus(
       id,
@@ -129,6 +201,8 @@ export async function answerMealClarification(id: string, answer: string): Promi
       error instanceof Error ? error.message : String(error),
     );
     throw error;
+  } finally {
+    setMealActivity(id);
   }
 }
 
@@ -138,16 +212,61 @@ export async function correctSavedMeal(id: string, correction: string): Promise<
 
   await setMealStatus(id, 'analyzing');
   try {
+    setMealActivity(id, 'reviewing_meal');
     const result = await correctMealAnalysis({
+      mealId: id,
       previousJson: JSON.stringify(meal.analysis),
       correction,
       language: locale === 'ru' ? 'Russian' : 'English',
+      onActivity: (activity) => setMealActivity(id, activity),
     });
     const analysis = parseMealAnalysis(result.text);
     delete analysis.clarification;
+    setMealActivity(id, 'saving_result');
     await saveMealAnalysis(id, analysis);
   } catch (error) {
     await setMealStatus(id, meal.status, error instanceof Error ? error.message : String(error));
     throw error;
+  } finally {
+    setMealActivity(id);
+  }
+}
+
+/** Re-runs the canonical meal analyzer so Assistant corrections can use saved visual evidence. */
+export async function reanalyzeSavedMeal(id: string, instruction?: string): Promise<void> {
+  const meal = await getMeal(id);
+  if (!meal) throw new Error('Meal was not found');
+  if (meal.photos.length === 0) {
+    if (meal.analysis && instruction?.trim()) return correctSavedMeal(id, instruction);
+    throw new Error('This meal has no saved photos to analyze');
+  }
+  if (processing.has(id)) throw new Error('This meal is already being analyzed');
+  processing.add(id);
+  await setMealStatus(id, 'analyzing');
+  try {
+    setMealActivity(id, 'reading_photos');
+    const photos = await Promise.all(meal.photos.map(async (photo) => ({
+      base64: await new File(photo.uri).base64(),
+      mimeType: photo.mimeType,
+    })));
+    const note = [meal.note, instruction?.trim() ? `User correction: ${instruction.trim()}` : '']
+      .filter(Boolean).join('\n');
+    setMealActivity(id, 'reviewing_meal');
+    const result = await analyzeMealPhotos({
+      mealId: id,
+      photos,
+      note,
+      language: locale === 'ru' ? 'Russian' : 'English',
+      onActivity: (activity) => setMealActivity(id, activity),
+    });
+    const analysis = parseMealAnalysis(result.text);
+    setMealActivity(id, 'saving_result');
+    await saveMealAnalysis(id, analysis);
+  } catch (error) {
+    await setMealStatus(id, meal.status, error instanceof Error ? error.message : String(error));
+    throw error;
+  } finally {
+    setMealActivity(id);
+    processing.delete(id);
   }
 }

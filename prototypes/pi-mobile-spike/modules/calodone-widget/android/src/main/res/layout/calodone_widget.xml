@@ -3,26 +3,49 @@
   android:id="@+id/calodone_widget_root"
   android:layout_width="match_parent"
   android:layout_height="match_parent"
-  android:background="@drawable/calodone_widget_background"
+  android:background="@android:color/transparent"
   android:clickable="true"
+  android:contentDescription="@string/calodone_widget_description"
   android:gravity="center"
-  android:orientation="horizontal"
-  android:paddingHorizontal="18dp"
-  android:paddingVertical="12dp">
+  android:orientation="vertical">
 
-  <ImageView
-    android:layout_width="24dp"
-    android:layout_height="24dp"
-    android:contentDescription="@null"
-    android:src="@drawable/calodone_widget_camera" />
+  <FrameLayout
+    android:layout_width="50dp"
+    android:layout_height="50dp"
+    android:background="@drawable/calodone_widget_background"
+    android:elevation="2dp">
+
+    <ImageView
+      android:layout_width="25dp"
+      android:layout_height="25dp"
+      android:layout_gravity="center"
+      android:contentDescription="@null"
+      android:src="@drawable/calodone_widget_camera" />
+
+    <ImageView
+      android:layout_width="17dp"
+      android:layout_height="17dp"
+      android:layout_gravity="top|end"
+      android:layout_margin="3dp"
+      android:background="@drawable/calodone_widget_badge"
+      android:contentDescription="@null"
+      android:padding="4dp"
+      android:src="@drawable/calodone_widget_plus" />
+  </FrameLayout>
 
   <TextView
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:layout_marginStart="9dp"
+    android:layout_marginTop="4dp"
+    android:ellipsize="end"
     android:fontFamily="sans"
-    android:text="@string/calodone_widget_label"
-    android:textColor="#FFFCF6"
-    android:textSize="15sp"
-    android:textStyle="bold" />
+    android:includeFontPadding="false"
+    android:maxLines="1"
+    android:shadowColor="#A0000000"
+    android:shadowDx="0"
+    android:shadowDy="1"
+    android:shadowRadius="2"
+    android:text="@string/calodone_widget_action"
+    android:textColor="#FFFFFF"
+    android:textSize="11sp" />
 </LinearLayout>

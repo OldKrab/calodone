@@ -1,67 +1,165 @@
+import {
+  BarlowCondensed_600SemiBold,
+  BarlowCondensed_700Bold,
+  useFonts,
+} from '@expo-google-fonts/barlow-condensed';
 import { Ionicons } from '@expo/vector-icons';
-import { File } from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
+import * as SecureStore from 'expo-secure-store';
+import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { isSignedIn, signInWithBrowser, signOut } from './src/ai/piClient';
-import { PrimaryButton } from './src/components/controls';
+import {
+  getSelectedModel,
+  getSelectedProvider,
+  getThinkingLevel,
+  getWebSearchEnabled,
+  isSignedIn,
+} from './src/ai/piClient';
 import {
   createMeal,
   deleteMeal,
+  deleteAllMeals,
   finalizeExpiredClarifications,
   getDailyGoals,
+  getGoalProfile,
+  getPreference,
   initializeMeals,
+  listDiagnosticEvents,
   listMeals,
+  removeAllMealPhotos,
   queueMealRetry,
   saveDailyGoals,
+  saveGoalSetup,
+  saveMealRecord,
+  savePreference,
   updateMeal,
 } from './src/data/mealRepository';
-import { color, space } from './src/design/tokens';
-import type { DailyGoals, Meal, MealAnalysis, MealPhoto } from './src/domain/meal';
-import { CaptureReviewScreen } from './src/features/capture/CaptureReviewScreen';
+import {
+  createChatThread,
+  deleteAllChatData,
+  deleteChatThread,
+  ensureClarificationThread,
+  exportChatData,
+  initializeChat,
+  latestChatThread,
+  listChatThreads,
+  preferredMealThread,
+  syncMealQuestionsToThread,
+} from './src/data/chatRepository';
+import { mergeCaloDoneBackup } from './src/data/backupRepository';
+import { color, type } from './src/design/tokens';
+import { AppDialogProvider, useAppDialog } from './src/components/AppDialog';
+import { mealQuestions, type DailyGoals, type Meal, type MealAnalysis, type MealPhoto } from './src/domain/meal';
+import type { GoalProfile } from './src/domain/goalEstimator';
+import { analysisFromItems } from './src/domain/mealOperations';
+import type { ChatThread } from './src/domain/chat';
+import {
+  BACKUP_FORMAT,
+  BACKUP_SCHEMA_VERSION,
+  MAX_BACKUP_BYTES,
+  parseCaloDoneBackup,
+  summarizeBackup,
+} from './src/domain/backup';
+import {
+  defaultNotificationPreferences,
+  defaultNutritionUnits,
+  parsePreference,
+  type NotificationPreferences,
+  type NutritionUnits,
+} from './src/domain/preferences';
 import { CaptureScreen } from './src/features/capture/CaptureScreen';
+import { CaptureReviewScreen } from './src/features/capture/CaptureReviewScreen';
+import { AssistantScreen, ChatHistoryScreen } from './src/features/chat/AssistantScreen';
 import { HomeScreen } from './src/features/home/HomeScreen';
 import { MealDetailScreen } from './src/features/meal/MealDetailScreen';
+import { SetupScreen } from './src/features/onboarding/SetupScreen';
+import { ProviderSetupScreen } from './src/features/provider/ProviderSetupScreen';
 import { SettingsScreen } from './src/features/settings/SettingsScreen';
-import { t } from './src/i18n';
+import { locale, setLocale, t, type Locale } from './src/i18n';
 import { registerMealBackgroundTask } from './src/services/backgroundMeals';
 import {
   answerMealClarification,
-  correctSavedMeal,
-  prepareMealNotifications,
+  applyNotificationPreferences,
   processMeal,
   processPendingMeals,
 } from './src/services/mealProcessor';
+import { undoAssistantAction } from './src/services/chatSession';
+import { subscribeMealActivity, type MealActivityStage } from './src/services/mealActivity';
+import { backDestination, type AppScreen } from './src/navigation/backNavigation';
 
-type Screen = 'home' | 'camera' | 'review' | 'settings' | 'detail';
+type Screen = AppScreen;
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppDialogProvider>
+        <CaloDoneApp />
+      </AppDialogProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function CaloDoneApp() {
+  const dialog = useAppDialog();
+  const insets = useSafeAreaInsets();
+  const [fontsLoaded] = useFonts({
+    BarlowCondensed_600SemiBold,
+    BarlowCondensed_700Bold,
+  });
   const [ready, setReady] = useState(false);
+  const [showSetup, setShowSetup] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [connectionError, setConnectionError] = useState('');
   const [screen, setScreen] = useState<Screen>('home');
   const [meals, setMeals] = useState<Meal[]>([]);
   const [goals, setGoals] = useState<DailyGoals>({});
+  const [goalProfile, setGoalProfile] = useState<GoalProfile>();
+  const [units, setUnits] = useState<NutritionUnits>(defaultNutritionUnits);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(defaultNotificationPreferences);
+  const [includePhotosInExport, setIncludePhotosInExport] = useState(true);
+  const [importingData, setImportingData] = useState(false);
+  const [, setLocaleVersion] = useState(0);
   const [selectedDay, setSelectedDay] = useState(startOfDay(Date.now()));
   const [selectedMealId, setSelectedMealId] = useState<string>();
+  const [manualMeal, setManualMeal] = useState<Meal>();
   const [photos, setPhotos] = useState<MealPhoto[]>([]);
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
-  const [correcting, setCorrecting] = useState(false);
   const [savingGoals, setSavingGoals] = useState(false);
   const [captureError, setCaptureError] = useState('');
+  const [chatThread, setChatThread] = useState<ChatThread>();
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
+  const [assistantMealId, setAssistantMealId] = useState<string>();
+  const [mealActivities, setMealActivities] = useState<ReadonlyMap<string, MealActivityStage>>(new Map());
+
+  useEffect(() => subscribeMealActivity(setMealActivities), []);
 
   const refresh = useCallback(async () => {
     await finalizeExpiredClarifications();
-    const [nextMeals, nextGoals] = await Promise.all([listMeals(), getDailyGoals()]);
+    const [nextMeals, nextGoals, nextGoalProfile] = await Promise.all([listMeals(), getDailyGoals(), getGoalProfile()]);
+    await Promise.all(nextMeals.flatMap((meal) => {
+      const questions = mealQuestions(meal.analysis?.clarification);
+      if (questions.length === 0) return [];
+      return [ensureClarificationThread(meal.id, meal.analysis?.title ?? t('meal'))
+        .then((thread) => syncMealQuestionsToThread(thread.id, meal.id, questions, meal.capturedAt))
+        .catch(() => undefined)];
+    }));
     setMeals(nextMeals);
     setGoals(nextGoals);
+    setGoalProfile(nextGoalProfile);
+  }, []);
+
+  const refreshChats = useCallback(async () => {
+    setChatThreads(await listChatThreads());
   }, []);
 
   const openMeal = useCallback((mealId: string) => {
+    setManualMeal(undefined);
     setSelectedMealId(mealId);
     setScreen('detail');
   }, []);
@@ -105,11 +203,52 @@ export default function App() {
   }, [openMeal, refresh]);
 
   useEffect(() => {
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (screen === 'settings') return false;
+      const destination = backDestination(screen, photos.length > 0);
+      if (destination === 'exit') return false;
+      if (screen === 'detail' && manualMeal) {
+        setManualMeal(undefined);
+        setSelectedMealId(undefined);
+      }
+      setScreen(destination);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [manualMeal, photos.length, screen]);
+
+  useEffect(() => {
     void (async () => {
       await initializeMeals();
+      await initializeChat();
+      const [storedUnits, storedNotifications, storedExportPhotos, storedLocale] = await Promise.all([
+        getPreference('nutrition_units'),
+        getPreference('notification_preferences'),
+        getPreference('export_photos'),
+        getPreference('locale'),
+      ]);
+      const nextUnits = parsePreference(storedUnits, defaultNutritionUnits);
+      const nextNotifications = parsePreference(storedNotifications, defaultNotificationPreferences);
+      setUnits(nextUnits);
+      setNotificationPreferences(nextNotifications);
+      setIncludePhotosInExport(storedExportPhotos !== 'false');
+      if (storedLocale === 'en' || storedLocale === 'ru') setLocale(storedLocale);
+      const setupComplete = (await SecureStore.getItemAsync('calodone.setup.v2.complete')) === 'true';
+      setShowSetup(!setupComplete);
       const signedIn = await isSignedIn();
       setAuthenticated(signedIn);
+      const existingThread = await latestChatThread();
+      const initialThread = existingThread ?? await createChatThread();
+      setChatThread(initialThread);
+      await refreshChats();
       await refresh();
+      const currentMeals = await listMeals();
+      if (setupComplete) {
+        await applyNotificationPreferences(
+          nextNotifications,
+          currentMeals.some((meal) => meal.capturedAt >= startOfDay(Date.now())),
+        );
+      }
       setReady(true);
       try {
         await registerMealBackgroundTask();
@@ -119,29 +258,20 @@ export default function App() {
       if (signedIn) await processPendingMeals();
       await refresh();
     })().catch(() => setReady(true));
-  }, [refresh]);
+  }, [refresh, refreshChats]);
 
   const dayMeals = useMemo(() => {
     const end = nextDay(selectedDay);
     return meals.filter((meal) => meal.capturedAt >= selectedDay && meal.capturedAt < end);
   }, [meals, selectedDay]);
-  const selectedMeal = meals.find((meal) => meal.id === selectedMealId);
+  const selectedMeal = manualMeal?.id === selectedMealId ? manualMeal : meals.find((meal) => meal.id === selectedMealId);
   const canGoNext = selectedDay < startOfDay(Date.now());
 
-  const connect = async () => {
-    setConnecting(true);
-    setConnectionError('');
-    try {
-      await signInWithBrowser({ onEvent: () => undefined });
-      setAuthenticated(true);
-      await processPendingMeals();
-      await refresh();
-    } catch {
-      setConnectionError(t('connectionError'));
-    } finally {
-      setConnecting(false);
-    }
-  };
+  useEffect(() => {
+    if (screen !== 'detail' || !selectedMeal || !['queued', 'analyzing'].includes(selectedMeal.status)) return;
+    const timer = setInterval(() => void refresh(), 1200);
+    return () => clearInterval(timer);
+  }, [refresh, screen, selectedMeal?.id, selectedMeal?.status]);
 
   const openCapture = () => {
     setCaptureError('');
@@ -150,7 +280,28 @@ export default function App() {
 
   const captured = (photo: MealPhoto) => {
     setPhotos((current) => [...current, photo]);
-    setScreen('review');
+    setScreen('capture_review');
+  };
+
+  const addManualMeal = () => {
+    const capturedAt = Date.now();
+    const meal: Meal = {
+      id: `${capturedAt.toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+      revision: 1,
+      capturedAt,
+      status: 'complete',
+      note: '',
+      photos: [],
+      analysis: {
+        title: t('meal'),
+        mealType: mealTypeFor(capturedAt),
+        items: [{ name: '', quantity: '', calories: 0, protein: 0, carbs: 0, fat: 0 }],
+        totals: { calories: 0, protein: 0, carbs: 0, fat: 0 },
+      },
+    };
+    setManualMeal(meal);
+    setSelectedMealId(meal.id);
+    setScreen('detail');
   };
 
   const deletePhoto = (photo: MealPhoto) => {
@@ -163,11 +314,11 @@ export default function App() {
   };
 
   const removePhoto = (index: number) => {
-    setPhotos((current) => {
-      const removed = current[index];
-      if (removed) deletePhoto(removed);
-      return current.filter((_, photoIndex) => photoIndex !== index);
-    });
+    const removed = photos[index];
+    if (removed) deletePhoto(removed);
+    const remaining = photos.filter((_, photoIndex) => photoIndex !== index);
+    setPhotos(remaining);
+    if (remaining.length === 0) setScreen('camera');
   };
 
   const discardCapture = () => {
@@ -182,21 +333,35 @@ export default function App() {
     if (photos.length === 0 || sending) return;
     setSending(true);
     setCaptureError('');
+    const storedPhotos: MealPhoto[] = [];
+    let mealSaved = false;
     try {
+      const mealId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+      const photoDirectory = new Directory(Paths.document, 'meal-photos');
+      photoDirectory.create({ idempotent: true, intermediates: true });
+      for (const [index, photo] of photos.entries()) {
+        const source = new File(photo.uri);
+        const destination = new File(photoDirectory, `${mealId}-${index}.jpg`);
+        await source.copy(destination);
+        storedPhotos.push({ ...photo, uri: destination.uri });
+      }
       const meal = await createMeal({
-        id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
+        id: mealId,
         capturedAt: Date.now(),
         note: note.trim(),
-        photos,
+        photos: storedPhotos,
       });
+      mealSaved = true;
+      photos.forEach(deletePhoto);
       setPhotos([]);
       setNote('');
       setSelectedDay(startOfDay(Date.now()));
       setScreen('home');
       await refresh();
-      void prepareMealNotifications();
+      void applyNotificationPreferences(notificationPreferences, true);
       void processMeal(meal.id).finally(refresh);
     } catch {
+      if (!mealSaved) storedPhotos.forEach(deletePhoto);
       setCaptureError(t('saveError'));
     } finally {
       setSending(false);
@@ -214,31 +379,68 @@ export default function App() {
     await refresh();
   };
 
-  const correct = async (value: string) => {
-    if (!selectedMeal) return;
-    setCorrecting(true);
-    try {
-      await correctSavedMeal(selectedMeal.id, value);
-      await refresh();
-    } finally {
-      setCorrecting(false);
-    }
-  };
-
   const saveMeal = async (capturedAt: number, analysis: MealAnalysis) => {
     if (!selectedMeal) return;
-    await updateMeal(selectedMeal.id, { capturedAt, analysis });
+    const normalizedAnalysis = analysisFromItems({ title: analysis.title, mealType: analysis.mealType, items: analysis.items });
+    if (manualMeal?.id === selectedMeal.id) {
+      await saveMealRecord({ ...manualMeal, capturedAt, analysis: normalizedAnalysis });
+      setManualMeal(undefined);
+    } else {
+      await updateMeal(selectedMeal.id, { capturedAt, analysis: normalizedAnalysis });
+    }
     await refresh();
   };
 
   const removeMeal = async () => {
     if (!selectedMeal) return;
+    if (manualMeal?.id === selectedMeal.id) {
+      setManualMeal(undefined);
+      setSelectedMealId(undefined);
+      setScreen('home');
+      return;
+    }
     selectedMeal.photos.forEach(deletePhoto);
     await deleteMeal(selectedMeal.id);
     setSelectedMealId(undefined);
     setScreen('home');
     await refresh();
   };
+
+  const removeMealFromHome = async (meal: Meal) => {
+    await deleteMeal(meal.id);
+    meal.photos.forEach(deletePhoto);
+    if (selectedMealId === meal.id) setSelectedMealId(undefined);
+    await refresh();
+  };
+
+  const showInfo = (title: string, message?: string) => dialog.show({
+    title,
+    message,
+    actions: [{ label: t('close'), role: 'cancel' }],
+  });
+
+  const confirmMealDeletion = (meal: Meal) => dialog.show({
+    title: t('deleteConfirmTitle'),
+    message: t('deleteConfirmBody'),
+    actions: [
+      { label: t('delete'), role: 'destructive', onPress: () => removeMealFromHome(meal) },
+      { label: t('cancel'), role: 'cancel' },
+    ],
+  });
+
+  const showMealActions = (meal: Meal) => dialog.show({
+    title: meal.analysis?.title ?? t('meal'),
+    actions: [
+      { label: t('askAssistant'), onPress: () => openAssistant(meal.id) },
+      { label: t('reanalyzeMeal'), onPress: () => {
+        if (meal.status === 'queued' || meal.status === 'analyzing') showInfo(t('analysisAlreadyRunning'));
+        else if (meal.photos.length === 0) showInfo(t('reanalyzeUnavailable'));
+        else void retry(meal);
+      } },
+      { label: t('delete'), role: 'destructive', onPress: () => confirmMealDeletion(meal) },
+      { label: t('cancel'), role: 'cancel' },
+    ],
+  });
 
   const persistGoals = async (nextGoals: DailyGoals) => {
     setSavingGoals(true);
@@ -250,34 +452,274 @@ export default function App() {
     }
   };
 
-  const disconnect = async () => {
-    await signOut();
-    setAuthenticated(false);
-    setScreen('home');
+  const persistGoalSetup = async (profile: GoalProfile, nextGoals: DailyGoals) => {
+    setSavingGoals(true);
+    try {
+      await saveGoalSetup(profile, nextGoals);
+      setGoalProfile(profile);
+      setGoals(nextGoals);
+      await refresh();
+    } finally {
+      setSavingGoals(false);
+    }
   };
 
-  if (!ready) {
+  const finishSetup = async (nextGoals: DailyGoals, profile: GoalProfile) => {
+    setSavingGoals(true);
+    try {
+      await saveGoalSetup(profile, nextGoals);
+      setGoalProfile(profile);
+      setGoals(nextGoals);
+      setAuthenticated(true);
+      setShowSetup(false);
+      await SecureStore.setItemAsync('calodone.setup.v2.complete', 'true');
+      await applyNotificationPreferences(notificationPreferences, false);
+      await processPendingMeals();
+      await refresh();
+    } finally {
+      setSavingGoals(false);
+    }
+  };
+
+  const providerConnected = async () => {
+    setAuthenticated(true);
+    setScreen('home');
+    await processPendingMeals();
+    await refresh();
+  };
+
+  const persistUnits = async (nextUnits: NutritionUnits) => {
+    await savePreference('nutrition_units', JSON.stringify(nextUnits));
+    setUnits(nextUnits);
+  };
+
+  const persistNotifications = async (preferences: NotificationPreferences) => {
+    await savePreference('notification_preferences', JSON.stringify(preferences));
+    setNotificationPreferences(preferences);
+    await applyNotificationPreferences(
+      preferences,
+      meals.some((meal) => meal.capturedAt >= startOfDay(Date.now())),
+    );
+  };
+
+  const persistLocale = async (nextLocale: Locale) => {
+    await savePreference('locale', nextLocale);
+    setLocale(nextLocale);
+    setLocaleVersion((version) => version + 1);
+  };
+
+  const persistExportPhotos = async (include: boolean) => {
+    await savePreference('export_photos', String(include));
+    setIncludePhotosInExport(include);
+  };
+
+  const exportData = async () => {
+    try {
+      const assistantInstructions = await getPreference('assistant_custom_instructions');
+      await shareJsonExport('calodone-export.json', t('exportMyData'), {
+        format: BACKUP_FORMAT,
+        schemaVersion: BACKUP_SCHEMA_VERSION,
+        exportedAt: new Date().toISOString(),
+        preferences: {
+          goals,
+          goalProfile,
+          units,
+          notifications: notificationPreferences,
+          locale,
+          assistantInstructions: assistantInstructions ?? '',
+        },
+        meals: await Promise.all(meals.map((meal) => exportableMeal(meal, includePhotosInExport))),
+        conversations: await exportChatData(includePhotosInExport),
+      });
+    } catch {
+      showInfo(t('exportFailedTitle'), t('exportFailedBody'));
+    }
+  };
+
+  const importData = async () => {
+    try {
+      const selection = await File.pickFileAsync({ mimeTypes: ['application/json', 'text/json'] });
+      if (selection.canceled) return;
+      if (selection.result.size > MAX_BACKUP_BYTES) {
+        showInfo(t('importFailedTitle'), t('importTooLarge'));
+        return;
+      }
+      const backup = parseCaloDoneBackup(await selection.result.json());
+      const summary = summarizeBackup(backup);
+      dialog.show({
+        title: t('importPreviewTitle'),
+        message: t('importPreviewBody', summary),
+        actions: [
+          { label: t('importAction'), onPress: () => performImport(backup) },
+          { label: t('cancel'), role: 'cancel' },
+        ],
+      });
+    } catch {
+      showInfo(t('importFailedTitle'), t('importFailedBody'));
+    }
+  };
+
+  const performImport = async (backup: ReturnType<typeof parseCaloDoneBackup>) => {
+    setImportingData(true);
+    try {
+      const result = await mergeCaloDoneBackup(backup);
+      if (backup.preferences.units) setUnits(backup.preferences.units);
+      if (backup.preferences.notifications) setNotificationPreferences(backup.preferences.notifications);
+      if (backup.preferences.locale) {
+        setLocale(backup.preferences.locale);
+        setLocaleVersion((version) => version + 1);
+      }
+      await Promise.all([refresh(), refreshChats()]);
+      if (backup.preferences.notifications) {
+        const importedMeals = await listMeals();
+        await applyNotificationPreferences(
+          backup.preferences.notifications,
+          importedMeals.some((meal) => meal.capturedAt >= startOfDay(Date.now())),
+        );
+      }
+      if (authenticated) void processPendingMeals().finally(refresh);
+      showInfo(t('importCompleteTitle'), t('importCompleteBody', {
+        meals: result.mealsImported,
+        conversations: result.conversationsImported,
+        photos: result.photosImported,
+        skipped: result.mealsSkipped + result.conversationsSkipped,
+      }));
+    } catch {
+      showInfo(t('importFailedTitle'), t('importFailedBody'));
+    } finally {
+      setImportingData(false);
+    }
+  };
+
+  const exportDiagnostics = async () => {
+    try {
+      const provider = await getSelectedProvider();
+      const model = await getSelectedModel(provider);
+      const [thinkingLevel, webSearchEnabled, events] = await Promise.all([
+        getThinkingLevel(provider, model),
+        getWebSearchEnabled(provider),
+        listDiagnosticEvents(),
+      ]);
+      await shareJsonExport('calodone-diagnostics.json', t('shareDiagnostics'), {
+        exportedAt: new Date().toISOString(),
+        app: { version: '1.0.0', platform: Platform.OS, platformVersion: Platform.Version },
+        ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
+        events: events.map((event) => {
+          if (event.operation === 'layout') return event;
+          const { outputText: _outputText, mealId: _mealId, threadId: _threadId, ...metadata } = event;
+          return metadata;
+        }),
+      });
+    } catch {
+      showInfo(t('exportFailedTitle'), t('diagnosticsExportFailedBody'));
+    }
+  };
+
+  const removeSavedPhotos = async () => {
+    const removed = await removeAllMealPhotos();
+    removed.forEach(deletePhoto);
+    await refresh();
+  };
+
+  const removeAllSavedMeals = async () => {
+    const removed = await deleteAllMeals();
+    removed.forEach(deletePhoto);
+    await deleteAllChatData();
+    const thread = await createChatThread();
+    setChatThread(thread);
+    await refreshChats();
+    setSelectedMealId(undefined);
+    setGoalProfile(undefined);
+    setGoals({});
+    await refresh();
+  };
+
+  const openAssistant = async (mealId?: string) => {
+    if (mealId) {
+      const meal = meals.find((item) => item.id === mealId);
+      const clarification = Boolean(meal?.analysis?.clarification);
+      const thread = clarification
+        ? await ensureClarificationThread(mealId, meal?.analysis?.title ?? t('meal'))
+        : await preferredMealThread(mealId, false) ?? await createChatThread({ mealId, purpose: 'meal' });
+      const questions = mealQuestions(meal?.analysis?.clarification);
+      if (questions.length > 0) await syncMealQuestionsToThread(thread.id, mealId, questions, meal?.capturedAt);
+      setChatThread(thread);
+      await refreshChats();
+    }
+    setAssistantMealId(mealId);
+    setScreen('assistant');
+  };
+
+  const createConversation = async (mealId?: string) => {
+    const thread = await createChatThread(mealId ? { mealId, purpose: 'meal' } : undefined);
+    setChatThread(thread);
+    setAssistantMealId(mealId);
+    await refreshChats();
+    setScreen('assistant');
+  };
+
+  const openConversation = (thread: ChatThread) => {
+    setChatThread(thread);
+    setAssistantMealId(thread.mealId);
+    setScreen('assistant');
+  };
+
+  const removeConversation = async (thread: ChatThread) => {
+    await deleteChatThread(thread.id);
+    const remaining = await listChatThreads();
+    let next = remaining[0];
+    if (!next) next = await createChatThread();
+    if (chatThread?.id === thread.id) setChatThread(next);
+    await refreshChats();
+  };
+
+  if (!ready || !fontsLoaded) {
     return <View style={styles.loading}><StatusBar style="dark" /><ActivityIndicator color={color.action} /></View>;
   }
 
-  if (!authenticated) {
-    return <ConnectScreen busy={connecting} error={connectionError} onConnect={connect} />;
-  }
-
-  if (screen === 'camera') {
-    return <><StatusBar style="light" /><CaptureScreen onCancel={() => setScreen(photos.length ? 'review' : 'home')} onCaptured={captured} /></>;
-  }
-
-  if (screen === 'review') {
+  if (showSetup) {
     return (
       <>
         <StatusBar style="dark" />
+        <SetupScreen saving={savingGoals} onComplete={finishSetup} />
+      </>
+    );
+  }
+
+  if (!authenticated) {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <ProviderSetupScreen completionLabel={t('continue')} onComplete={providerConnected} />
+      </>
+    );
+  }
+
+  if (screen === 'camera') {
+    return (
+      <>
+        <StatusBar style="light" />
+        <CaptureScreen
+          error={captureError}
+          photos={photos}
+          onAddManual={addManualMeal}
+          onCancel={() => photos.length > 0 ? setScreen('capture_review') : discardCapture()}
+          onCaptured={captured}
+        />
+      </>
+    );
+  }
+
+  if (screen === 'capture_review') {
+    return (
+      <>
+        <StatusBar style="light" />
         <CaptureReviewScreen
           error={captureError}
           note={note}
           photos={photos}
           sending={sending}
-          onAddPhoto={openCapture}
+          onAddPhoto={() => setScreen('camera')}
           onCancel={discardCapture}
           onNoteChange={setNote}
           onRemovePhoto={removePhoto}
@@ -291,11 +733,86 @@ export default function App() {
     return (
       <SettingsScreen
         goals={goals}
+        goalProfile={goalProfile}
+        includePhotosInExport={includePhotosInExport}
+        importingData={importingData}
+        locale={locale}
+        notifications={notificationPreferences}
         saving={savingGoals}
+        units={units}
         onBack={() => setScreen('home')}
+        onChangeLocale={persistLocale}
+        onDeleteAllMeals={removeAllSavedMeals}
+        onExport={exportData}
+        onImport={importData}
+        onExportDiagnostics={exportDiagnostics}
+        onIncludePhotosInExport={persistExportPhotos}
+        onManageProvider={() => setScreen('providers')}
+        onRemoveAllPhotos={removeSavedPhotos}
+        onSaveGoalSetup={persistGoalSetup}
         onSaveGoals={persistGoals}
-        onSignOut={disconnect}
+        onSaveNotifications={persistNotifications}
+        onSaveUnits={persistUnits}
       />
+    );
+  }
+
+  if (screen === 'providers') {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <ProviderSetupScreen
+          onBack={() => setScreen('settings')}
+        />
+      </>
+    );
+  }
+
+  if (screen === 'assistant_provider') {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <ProviderSetupScreen
+          onBack={() => setScreen('assistant')}
+        />
+      </>
+    );
+  }
+
+  if (screen === 'chat_history') {
+    return (
+      <>
+        <StatusBar style="dark" />
+        <ChatHistoryScreen
+          threads={chatThreads}
+          onBack={() => setScreen('assistant')}
+          onDelete={(thread) => void removeConversation(thread)}
+          onNewChat={() => void createConversation()}
+          onOpen={openConversation}
+        />
+      </>
+    );
+  }
+
+  const navigationHeight = 60 + insets.bottom;
+
+  if (screen === 'assistant' && chatThread) {
+    return (
+      <View style={styles.appShell}>
+        <StatusBar style="dark" />
+        <AssistantScreen
+          bottomInset={navigationHeight}
+          selectedMeal={meals.find((meal) => meal.id === assistantMealId)}
+          thread={chatThread}
+          onClearMealContext={() => setAssistantMealId(undefined)}
+          onDataChanged={async () => { await refresh(); await refreshChats(); }}
+          onHistory={() => { void refreshChats(); setScreen('chat_history'); }}
+          onNewChat={() => void createConversation(assistantMealId)}
+          onModelSettings={() => setScreen('assistant_provider')}
+          onUndo={undoAssistantAction}
+        />
+        <PrimaryNavigation active="assistant" bottomInset={insets.bottom} onAssistant={() => undefined} onToday={() => setScreen('home')} />
+      </View>
     );
   }
 
@@ -304,10 +821,17 @@ export default function App() {
       <>
         <StatusBar style="dark" />
         <MealDetailScreen
-          correcting={correcting}
+          activity={mealActivities.get(selectedMeal.id)}
+          initialEditing={Boolean(manualMeal)}
           meal={selectedMeal}
-          onBack={() => setScreen('home')}
-          onCorrect={correct}
+          units={units}
+          onAnswer={(value) => answer(selectedMeal, value)}
+          onAskAssistant={() => openAssistant(selectedMeal.id)}
+          onBack={() => {
+            setManualMeal(undefined);
+            setSelectedMealId(undefined);
+            setScreen('home');
+          }}
           onDelete={removeMeal}
           onSave={saveMeal}
         />
@@ -316,40 +840,56 @@ export default function App() {
   }
 
   return (
-    <>
+    <View style={styles.appShell}>
       <StatusBar style="dark" />
       <HomeScreen
+        activities={mealActivities}
+        bottomInset={navigationHeight}
         canGoNext={canGoNext}
         day={selectedDay}
         goals={goals}
         meals={dayMeals}
+        units={units}
         onAnswer={answer}
+        onAskAssistant={(meal) => void openAssistant(meal.id)}
         onCapture={openCapture}
         onNextDay={() => canGoNext && setSelectedDay(nextDay(selectedDay))}
         onOpen={(meal) => openMeal(meal.id)}
+        onMealLongPress={showMealActions}
         onPreviousDay={() => setSelectedDay(previousDay(selectedDay))}
         onRetry={retry}
         onSettings={() => setScreen('settings')}
       />
-    </>
+      <PrimaryNavigation active="home" bottomInset={insets.bottom} onAssistant={() => openAssistant()} onToday={() => setScreen('home')} />
+    </View>
   );
 }
 
-function ConnectScreen(props: { busy: boolean; error: string; onConnect: () => void }) {
+function PrimaryNavigation(props: {
+  active: 'home' | 'assistant';
+  bottomInset: number;
+  onToday: () => void;
+  onAssistant: () => void;
+}) {
   return (
-    <SafeAreaView style={styles.connect}>
-      <StatusBar style="dark" />
-      <View style={styles.connectMark}><Ionicons name="restaurant" size={29} color={color.surface} /></View>
-      <Text style={styles.brand}>{t('appName')}</Text>
-      <View style={styles.connectCopy}>
-        <Text style={styles.connectTitle}>{t('connectTitle')}</Text>
-        <Text style={styles.connectBody}>{t('connectBody')}</Text>
-      </View>
-      <View style={styles.connectAction}>
-        {props.error ? <Text style={styles.error}>{props.error}</Text> : null}
-        <PrimaryButton busy={props.busy} label={props.busy ? t('connecting') : t('connectAction')} onPress={props.onConnect} />
-      </View>
-    </SafeAreaView>
+    <View style={[styles.navigation, { height: 60 + props.bottomInset, paddingBottom: props.bottomInset }]}>
+      <NavigationItem active={props.active === 'home'} icon="today-outline" label={t('today')} onPress={props.onToday} />
+      <NavigationItem active={props.active === 'assistant'} icon="chatbox-ellipses-outline" label={t('assistant')} onPress={props.onAssistant} />
+    </View>
+  );
+}
+
+function NavigationItem(props: {
+  active: boolean;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable accessibilityRole="tab" accessibilityState={{ selected: props.active }} onPress={props.onPress} style={({ pressed }) => [styles.navigationItem, pressed && styles.navigationPressed]}>
+      <Ionicons name={props.icon} size={21} color={props.active ? color.action : color.muted} />
+      <Text style={[styles.navigationLabel, props.active && styles.navigationLabelActive]}>{props.label}</Text>
+    </Pressable>
   );
 }
 
@@ -357,6 +897,26 @@ function startOfDay(timestamp: number): number {
   const date = new Date(timestamp);
   date.setHours(0, 0, 0, 0);
   return date.getTime();
+}
+
+async function exportableMeal(meal: Meal, includePhotos: boolean) {
+  const exportedPhotos = includePhotos
+    ? await Promise.all(meal.photos.map(async (photo) => {
+      try {
+        return { mimeType: photo.mimeType, base64: await new File(photo.uri).base64() };
+      } catch {
+        return { mimeType: photo.mimeType, unavailable: true };
+      }
+    }))
+    : [];
+  return { ...meal, photos: exportedPhotos };
+}
+
+async function shareJsonExport(fileName: string, title: string, value: unknown): Promise<void> {
+  const file = new File(Paths.cache, fileName);
+  file.create({ overwrite: true, intermediates: true });
+  file.write(JSON.stringify(value, null, 2));
+  await Sharing.shareAsync(file.uri, { dialogTitle: title, mimeType: 'application/json' });
 }
 
 function nextDay(timestamp: number): number {
@@ -371,14 +931,20 @@ function previousDay(timestamp: number): number {
   return startOfDay(date.getTime());
 }
 
+function mealTypeFor(timestamp: number): MealAnalysis['mealType'] {
+  const hour = new Date(timestamp).getHours();
+  if (hour < 11) return 'breakfast';
+  if (hour < 16) return 'lunch';
+  if (hour < 21) return 'dinner';
+  return 'snack';
+}
+
 const styles = StyleSheet.create({
+  appShell: { backgroundColor: color.canvas, flex: 1 },
   loading: { alignItems: 'center', backgroundColor: color.canvas, flex: 1, justifyContent: 'center' },
-  connect: { backgroundColor: color.canvas, flex: 1, paddingHorizontal: space.lg, paddingTop: space.xl },
-  connectMark: { alignItems: 'center', backgroundColor: color.action, borderRadius: 18, height: 58, justifyContent: 'center', width: 58 },
-  brand: { color: color.action, fontSize: 14, fontWeight: '700', marginTop: space.md },
-  connectCopy: { marginTop: 'auto', maxWidth: 350 },
-  connectTitle: { color: color.ink, fontSize: 34, fontWeight: '700', letterSpacing: -1.2, lineHeight: 39 },
-  connectBody: { color: color.muted, fontSize: 16, lineHeight: 23, marginTop: space.md },
-  connectAction: { gap: space.sm, marginBottom: space.xl, marginTop: space.xl },
-  error: { color: color.error, fontSize: 13, textAlign: 'center' },
+  navigation: { alignItems: 'flex-start', backgroundColor: color.surface, borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth, bottom: 0, flexDirection: 'row', left: 0, paddingHorizontal: 28, position: 'absolute', right: 0 },
+  navigationItem: { alignItems: 'center', flex: 1, height: 60, justifyContent: 'center', minWidth: 72 },
+  navigationPressed: { backgroundColor: color.surfacePressed },
+  navigationLabel: { color: color.muted, fontFamily: type.ticket, fontSize: 12, marginTop: 2 },
+  navigationLabelActive: { color: color.action, fontFamily: type.ticketBold },
 });

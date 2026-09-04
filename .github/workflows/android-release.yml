@@ -1,0 +1,117 @@
+name: Android release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: prototypes/pi-mobile-spike
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: prototypes/pi-mobile-spike/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check source
+        run: |
+          npm run check
+          node --test src/**/*.test.ts
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Restore release signing key
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 is not configured" >&2
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/calodone-release.keystore"
+
+      - name: Build signed ARM64 APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEY_PASSWORD" ]; then
+            echo "Android signing secrets are not fully configured" >&2
+            exit 1
+          fi
+          ./android/gradlew -p android assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/calodone-release.keystore" \
+            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
+
+      - name: Verify and name APK
+        id: artifact
+        run: |
+          version=$(node -p "require('./package.json').version")
+          artifact="calodone-${version}-arm64.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$artifact"
+
+          signer=$("$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)/apksigner" verify --print-certs "$artifact" | sed -n 's/Signer #1 certificate SHA-256 digest: //p')
+          expected="fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c"
+          if [ "$signer" != "$expected" ]; then
+            echo "Unexpected signing certificate: $signer" >&2
+            exit 1
+          fi
+
+          abi=$(unzip -Z1 "$artifact" | awk -F/ '/^lib\// { print $2 }' | sort -u)
+          if [ "$abi" != "arm64-v8a" ]; then
+            echo "Unexpected APK ABIs: $abi" >&2
+            exit 1
+          fi
+
+          echo "path=prototypes/pi-mobile-spike/$artifact" >> "$GITHUB_OUTPUT"
+          echo "name=$artifact" >> "$GITHUB_OUTPUT"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: ${{ steps.artifact.outputs.path }}
+          if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ steps.artifact.outputs.path }}
+          generate_release_notes: true

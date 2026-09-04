@@ -3,7 +3,8 @@
     "name": "CaloDone",
     "slug": "calodone",
     "scheme": "calodone",
-    "version": "1.2.0",
+    "version": "1.0.0",
+    "backgroundColor": "#F3F0EA",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -19,14 +20,19 @@
     },
     "android": {
       "package": "dev.calodone.pimobilespike",
-      "versionCode": 5,
+      "versionCode": 1,
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#59677D",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false
+    },
+    "androidNavigationBar": {
+      "backgroundColor": "#FCFAF5",
+      "barStyle": "dark-content",
+      "enforceContrast": false
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -40,10 +46,27 @@
           "recordAudioAndroid": false
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CaloDone lets you choose existing meal photos for analysis."
+        }
+      ],
       "expo-notifications",
       "expo-web-browser",
       "expo-sqlite",
-      "expo-background-task"
+      "expo-background-task",
+      "expo-sharing",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "CaloDone needs photo access only when you save or share a meal photo.",
+          "savePhotosPermission": "CaloDone saves a meal photo only after you choose Save to device.",
+          "granularPermissions": [
+            "photo"
+          ]
+        }
+      ]
     ]
   }
 }

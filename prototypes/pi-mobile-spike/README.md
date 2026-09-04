@@ -14,7 +14,7 @@ The Android home-screen widget opens directly into the camera. Queued meals use 
 
 Opening a meal exposes its nutrition breakdown, **Fix with AI**, and manual editing for items, portions, meal type, time, calories, and macros. The Today header navigates previous days, and Settings stores optional calorie and macro goals.
 
-Captured photos stay in private app storage, never enter the gallery, and are deleted after successful analysis. Failed and interrupted jobs retain their private photos so they can be retried.
+Captured photos stay in private app storage and never enter the system gallery automatically. They remain attached to the meal so the user and assistant can inspect them later; saving or sharing a photo requires an explicit user action.
 
 The interface and formatting are localized in English and Russian. Provider authorization and multimodal transport remain isolated under `src/ai`; meal prompts, persistence, and processing live outside that boundary.
 
@@ -35,5 +35,5 @@ No emulator is required. `npm run android` can install a development build on a 
 - OpenAI Codex is the first provider.
 - Android controls the exact WorkManager execution time; immediate processing remains best effort when the app leaves the foreground, while queued work is durable and resumes periodically or on the next launch.
 - Nutrition estimates currently come from the connected model rather than a verified food database.
-- Barcode capture, packaged-food lookup, export, backups, and health-platform synchronization are not implemented.
+- Barcode capture, packaged-food lookup, import, and health-platform synchronization are not implemented.
 - The OAuth adapter follows Pi/OpenAI integration behavior that is not documented as a stable general mobile API and may require upstream maintenance.

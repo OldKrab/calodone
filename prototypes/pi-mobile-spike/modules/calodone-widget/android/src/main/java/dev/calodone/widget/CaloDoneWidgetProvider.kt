@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.Intent
 import android.net.Uri
 import android.widget.RemoteViews
 
@@ -14,8 +15,9 @@ class CaloDoneWidgetProvider : AppWidgetProvider() {
     appWidgetIds: IntArray,
   ) {
     val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+      action = Intent.ACTION_VIEW
       data = Uri.parse("calodone://capture")
-      flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+      flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
     } ?: return
     val pendingIntent = PendingIntent.getActivity(
       context,

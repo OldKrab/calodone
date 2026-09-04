@@ -2,6 +2,7 @@ import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 
 import { initializeMeals } from '../data/mealRepository';
+import { initializeChat } from '../data/chatRepository';
 import { processPendingMeals } from './mealProcessor';
 
 const TASK_NAME = 'calodone-process-meals';
@@ -9,6 +10,7 @@ const TASK_NAME = 'calodone-process-meals';
 TaskManager.defineTask(TASK_NAME, async () => {
   try {
     await initializeMeals();
+    await initializeChat();
     await processPendingMeals();
     return BackgroundTask.BackgroundTaskResult.Success;
   } catch {
