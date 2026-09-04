@@ -93,7 +93,7 @@ jobs:
           fi
           certificate=$($apksigner verify --print-certs "$artifact")
           printf '%s\n' "$certificate"
-          signer=$(printf '%s\n' "$certificate" | awk -F': ' '/SHA-256 digest/ { print tolower($2); exit }' | tr -d ':')
+          signer=$(printf '%s\n' "$certificate" | sed -n 's/^.*SHA-256 digest: //p' | head -1 | tr '[:upper:]' '[:lower:]' | tr -d ':')
           expected="fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c"
           if [ "$signer" != "$expected" ]; then
             echo "Unexpected signing certificate: $signer" >&2
