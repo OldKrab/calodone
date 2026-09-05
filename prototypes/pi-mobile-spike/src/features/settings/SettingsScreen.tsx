@@ -127,7 +127,7 @@ function SettingsHub(props: Parameters<typeof SettingsScreen>[0] & {
       <SettingsSection title={t('appSection')}>
         <SettingsLink label={t('language')} value={props.locale === 'ru' ? 'Русский' : 'English'} onPress={() => props.onOpen('language')} />
         <SettingsLink label={t('dataPrivacy')} value={t('photosKeptWithMeals')} onPress={() => props.onOpen('privacy')} />
-        <SettingsLink label={t('aboutCalodone')} value={t('versionLabel', { version: '1.1.0' })} onPress={() => props.onOpen('about')} />
+        <SettingsLink label={t('aboutCalodone')} value={t('versionLabel', { version: '1.1.1' })} onPress={() => props.onOpen('about')} />
       </SettingsSection>
     </ScrollView>
   );
@@ -322,7 +322,7 @@ function PrivacyPage(props: { includePhotos: boolean; importing: boolean; onBack
       <View style={styles.actionList}>
         <Pressable disabled={props.importing} onPress={() => void props.onImport()} style={[styles.textAction, props.importing && styles.disabled]}><Text style={styles.textActionLabel}>{t(props.importing ? 'importingData' : 'importMyData')}</Text></Pressable>
         <Pressable onPress={() => void props.onExport()} style={styles.textAction}><Text style={styles.textActionLabel}>{t('exportMyData')}</Text></Pressable>
-        <Pressable onPress={() => void props.onExportDiagnostics()} style={styles.textAction}><Text style={styles.textActionLabel}>{t('shareDiagnostics')}</Text></Pressable>
+        <Pressable onPress={() => void props.onExportDiagnostics()} style={styles.textAction}><Text style={styles.textActionLabel}>{t('saveDiagnostics')}</Text></Pressable>
         <Pressable onPress={() => confirmRemoval('photos')} style={styles.textAction}><Text style={styles.textActionLabel}>{t('removeAllPhotos')}</Text></Pressable>
         <Pressable onPress={() => confirmRemoval('data')} style={styles.textAction}><Text style={styles.dangerLabel}>{t('deleteAllMealData')}</Text></Pressable>
       </View>
@@ -338,7 +338,7 @@ function AboutPage(props: { onBack: () => void }) {
       <Text style={styles.aboutTitle}>CaloDone</Text>
       <Text style={styles.aboutCopy}>{t('aboutBody')}</Text>
       <View style={styles.formPanel}>
-        <InfoRow label={t('version')} value="1.1.0" />
+        <InfoRow label={t('version')} value="1.1.1" />
         <InfoRow label={t('openSource')} value="CaloDone" />
         <InfoRow label={locale === 'ru' ? 'Лицензия' : 'License'} value="MIT" />
       </View>

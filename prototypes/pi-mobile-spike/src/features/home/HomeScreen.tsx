@@ -235,7 +235,7 @@ export function HomeScreen(props: {
             )}
           </ScrollView>
           <View style={styles.capture}>
-            <PrimaryButton icon="camera-outline" label={t('addMeal')} onPress={props.onCapture} />
+            <PrimaryButton icon="add" label={t('addMeal')} onPress={props.onCapture} />
           </View>
         </View>
       </ScreenReveal>

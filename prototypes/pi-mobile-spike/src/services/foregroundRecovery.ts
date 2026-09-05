@@ -1,6 +1,7 @@
+import { foregroundWorkActive } from './foregroundWork';
 import { AppState } from 'react-native';
 
-/** Android may suspend the connection in background. Retry on return, not in a loop there. */
+/** Android may suspend the connection in background. An acquired foreground service permits a bounded retry while another app is open. */
 export async function waitForConnectionRecovery(signal?: AbortSignal): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -13,7 +14,7 @@ export async function waitForConnectionRecovery(signal?: AbortSignal): Promise<v
     const abort = () => finish(new Error('Request cancelled'));
     const schedule = () => {
       clearTimeout(timer);
-      if (AppState.currentState === 'active') timer = setTimeout(() => finish(), 1000);
+      if ((AppState.currentState === 'active' || foregroundWorkActive())) timer = setTimeout(() => finish(), 1000);
     };
     const subscription = AppState.addEventListener('change', schedule);
     signal?.addEventListener('abort', abort, { once: true });

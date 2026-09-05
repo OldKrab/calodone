@@ -1,5 +1,13 @@
 const copy = {
   en: {
+    saveDiagnostics: 'Save diagnostics', diagnosticsSaved: 'Diagnostics saved',
+    zoomIn: 'Zoom in', zoomOut: 'Zoom out',
+    describeMeal: 'Describe meal', mealDescription: 'What did you eat?',
+    describeMealHelp: 'Write what you ate. We’ll estimate the nutrition.',
+    mealDescriptionExample: 'Two eggs, a slice of toast with butter, and coffee with milk',
+    describeMealHint: 'Include portions if you know them. You can clarify or correct the estimate later. No photo needed.',
+    enterNutritionManually: 'Enter nutrition manually', descriptionSaveError: 'Couldn’t save this meal. Your description is still here. Try again.',
+
     appName: 'CaloDone', today: 'Today', settings: 'Settings', calories: 'Calories', kcal: 'kcal', grams: 'g',
     ofGoal: '{{current}} of {{goal}} kcal', protein: 'Protein', carbs: 'Carbs', fat: 'Fat',
     macroValue: '{{name}} {{value}} g', meals: 'Meals', loggedMeals: 'Logged', needsAttention: 'Needs attention', addMeal: 'Add meal',
@@ -99,6 +107,14 @@ const copy = {
     version: 'Version', openSource: 'Open source',
   },
   ru: {
+    saveDiagnostics: 'Сохранить диагностику', diagnosticsSaved: 'Диагностика сохранена',
+    zoomIn: 'Приблизить', zoomOut: 'Отдалить',
+    describeMeal: 'Описать еду', mealDescription: 'Что вы съели?',
+    describeMealHelp: 'Напишите, что вы съели. Мы оценим калории и БЖУ.',
+    mealDescriptionExample: 'Два яйца, тост со сливочным маслом и кофе с молоком',
+    describeMealHint: 'Укажите порции, если знаете. Оценку можно уточнить или исправить позже. Фото не нужно.',
+    enterNutritionManually: 'Ввести калории и БЖУ вручную', descriptionSaveError: 'Не удалось сохранить приём пищи. Описание осталось здесь. Попробуйте ещё раз.',
+
     appName: 'CaloDone', today: 'Сегодня', settings: 'Настройки', calories: 'Калории', kcal: 'ккал', grams: 'г',
     ofGoal: '{{current}} из {{goal}} ккал', protein: 'Белки', carbs: 'Углеводы', fat: 'Жиры',
     macroValue: '{{name}} {{value}} г', meals: 'Приёмы пищи', loggedMeals: 'Записано', needsAttention: 'Требует внимания', addMeal: 'Добавить еду',

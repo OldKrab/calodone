@@ -27,6 +27,7 @@ export type AiDiagnosticEvent = {
   id: string;
   createdAt: number;
   operation: 'analyze' | 'clarify' | 'correct' | 'chat';
+  phase?: 'started';
   appState?: string;
   mealId?: string;
   threadId?: string;

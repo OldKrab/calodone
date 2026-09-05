@@ -24,6 +24,7 @@ import { ScreenReveal } from '../../components/ScreenReveal';
 import { color, radius, space, type } from '../../design/tokens';
 import { mealQuestions, type Meal, type MealAnalysis, type MealItem, type MealType, type NutritionTotals } from '../../domain/meal';
 import { displayEnergy, displayWeight, type NutritionUnits } from '../../domain/preferences';
+import { mealWeightGrams } from '../../domain/mealWeight';
 import { formatNumber, formatTime, locale, t } from '../../i18n';
 import type { MealActivityStage } from '../../services/mealActivity';
 
@@ -228,6 +229,7 @@ function Header(props: {
 }
 
 function MealOverview(props: { meal: Meal; analysis: MealAnalysis; units: NutritionUnits }) {
+  const weight = mealWeightGrams(props.analysis.items.map((item) => item.quantity));
   const dialog = useAppDialog();
   const { fontScale, width } = useWindowDimensions();
   const compact = shouldStackFormFields(width, fontScale);
@@ -272,6 +274,11 @@ function MealOverview(props: { meal: Meal; analysis: MealAnalysis; units: Nutrit
         <Text style={styles.title}>{props.analysis.title}</Text>
         <View style={styles.totalRow}>
           <Text style={styles.totalCalories}>{formatNumber(displayEnergy(props.analysis.totals.calories, props.units))} {energyUnit(props.units)}</Text>
+          <Text style={styles.totalMacros}>
+            {weight === null
+              ? (locale === 'ru' ? 'Общая масса не определена' : 'Total weight unavailable')
+              : `${locale === 'ru' ? 'Общая масса' : 'Total weight'} ≈ ${formatMacro(weight, props.units)}`}
+          </Text>
           <Text style={styles.totalMacros}>
             {t('proteinShort')} {formatMacro(props.analysis.totals.protein, props.units)} · {t('carbsShort')} {formatMacro(props.analysis.totals.carbs, props.units)} · {t('fatShort')} {formatMacro(props.analysis.totals.fat, props.units)}
           </Text>
