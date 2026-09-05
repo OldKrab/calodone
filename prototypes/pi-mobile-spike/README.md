@@ -1,14 +1,14 @@
 # CaloDone Android app
 
-This directory contains the first usable CaloDone vertical slice. It grew from the Pi mobile compatibility spike after browser-based ChatGPT login and Codex model requests were verified on a physical Android phone.
+This directory contains the production CaloDone Android app. Its name comes from the original Pi mobile compatibility spike. See the [root README](../../README.md) for the current release, installation, and contribution instructions.
 
 ## Current flow
 
 1. Connect a ChatGPT account through browser OAuth.
 2. Tap **Add meal** to open CaloDone's embedded camera.
-3. Take one photo, optionally add another angle or a short note, then tap **Send**.
+3. Take one photo, optionally add another angle or a short note, then start analysis.
 4. Return immediately to the Today screen while CaloDone recognizes the complete meal.
-5. Answer one high-impact clarification if needed. Unanswered clarifications become **Estimated** after 24 hours.
+5. Answer any remaining clarification questions if needed. Unanswered clarifications become **Estimated** after 24 hours.
 
 The Android home-screen widget opens directly into the camera. Queued meals use foreground processing first and a WorkManager-backed periodic task for durable recovery after interruption. Failed requests use bounded exponential retries.
 
@@ -23,7 +23,7 @@ The interface and formatting are localized in English and Russian. Provider auth
 This cannot run in Expo Go because Codex OAuth uses a native localhost callback listener.
 
 ```sh
-npm install
+npm ci
 npm run check
 npm run android
 ```
@@ -35,5 +35,5 @@ No emulator is required. `npm run android` can install a development build on a 
 - OpenAI Codex is the first provider.
 - Android controls the exact WorkManager execution time; immediate processing remains best effort when the app leaves the foreground, while queued work is durable and resumes periodically or on the next launch.
 - Nutrition estimates currently come from the connected model rather than a verified food database.
-- Barcode capture, packaged-food lookup, import, and health-platform synchronization are not implemented.
+- Barcode scanning, a dedicated packaged-food database, and health-platform synchronization are not implemented. App-data import and export are available in Settings.
 - The OAuth adapter follows Pi/OpenAI integration behavior that is not documented as a stable general mobile API and may require upstream maintenance.
