@@ -1,3 +1,6 @@
+import { foregroundWorkActive } from './src/services/foregroundWork';
+import { DescribeMealScreen } from './src/features/capture/DescribeMealScreen';
+import { hasMealInput } from './src/ai/mealInput';
 import { Ionicons } from '@expo/vector-icons';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
@@ -159,6 +162,18 @@ function CaloDoneApp() {
     setGoalProfile(nextGoalProfile);
   }, []);
 
+  useEffect(() => {
+    if (!ready || !authenticated) return;
+    const resume = () => {
+      if (AppState.currentState === 'active') void processPendingMeals().catch(() => undefined).finally(refresh);
+    };
+    const subscription = AppState.addEventListener('change', resume);
+    // A transport failure queues a delayed retry. Revisit that queue while the
+    // app is open instead of leaving it idle until WorkManager's periodic run.
+    const timer = setInterval(resume, 15_000);
+    return () => { subscription.remove(); clearInterval(timer); };
+  }, [ready, authenticated, refresh]);
+
   const refreshChats = useCallback(async () => {
     setChatThreads(await listChatThreads());
   }, []);
@@ -216,11 +231,16 @@ function CaloDoneApp() {
         setManualMeal(undefined);
         setSelectedMealId(undefined);
       }
+      if (screen === 'describe') {
+        if (sending) return true;
+        setNote('');
+        setCaptureError('');
+      }
       setScreen(destination);
       return true;
     });
     return () => subscription.remove();
-  }, [manualMeal, photos.length, screen]);
+  }, [manualMeal, photos.length, screen, sending]);
 
   useEffect(() => {
     void (async () => {
@@ -334,8 +354,13 @@ function CaloDoneApp() {
     setScreen('home');
   };
 
+  const openDescription = () => {
+    discardCapture();
+    setScreen('describe');
+  };
+
   const sendMeal = async () => {
-    if (photos.length === 0 || sending) return;
+    if (!hasMealInput({ photos, note }) || sending) return;
     setSending(true);
     setCaptureError('');
     const storedPhotos: MealPhoto[] = [];
@@ -605,17 +630,23 @@ function CaloDoneApp() {
         getWebSearchEnabled(provider),
         listDiagnosticEvents(),
       ]);
-      await shareJsonExport('calodone-diagnostics.json', t('shareDiagnostics'), {
+      const directory = await Directory.pickDirectoryAsync();
+      const filename = `calodone-diagnostics-${Date.now()}.json`;
+      const file = directory.createFile(filename, 'application/json');
+      file.write(JSON.stringify({
         exportedAt: new Date().toISOString(),
-        app: { version: '1.1.0', platform: Platform.OS, platformVersion: Platform.Version },
+        processing: { foregroundServiceActive: foregroundWorkActive(), meals: (await listMeals()).map(meal => ({ status: meal.status, capturedAt: meal.capturedAt, error: meal.error })) },
+        app: { version: '1.1.1', platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
           if (event.operation === 'layout' || event.operation === 'lifecycle') return event;
           const { outputText: _outputText, mealId: _mealId, threadId: _threadId, ...metadata } = event;
           return metadata;
         }),
-      });
-    } catch {
+      }, null, 2));
+      showInfo(t('diagnosticsSaved'), filename);
+    } catch (error) {
+      if (/picker.*cancel/i.test(String(error))) return;
       showInfo(t('exportFailedTitle'), t('diagnosticsExportFailedBody'));
     }
   };
@@ -707,12 +738,19 @@ function CaloDoneApp() {
         <CaptureScreen
           error={captureError}
           photos={photos}
-          onAddManual={addManualMeal}
+          onDescribe={openDescription}
           onCancel={() => photos.length > 0 ? setScreen('capture_review') : discardCapture()}
           onCaptured={captured}
         />
       </>
     );
+  }
+
+  if (screen === 'describe') {
+    return <>
+      <StatusBar style="dark" />
+      <DescribeMealScreen note={note} sending={sending} error={captureError ? t('descriptionSaveError') : undefined} onChange={setNote} onCancel={discardCapture} onSend={() => void sendMeal()} />
+    </>;
   }
 
   if (screen === 'capture_review') {
@@ -861,7 +899,12 @@ function CaloDoneApp() {
         units={units}
         onAnswer={answer}
         onAskAssistant={(meal) => void openAssistant(meal.id)}
-        onCapture={openCapture}
+        onCapture={() => dialog.show({ title: t('addMeal'), actions: [
+          { label: t('takePhoto'), onPress: openCapture },
+          { label: t('describeMeal'), onPress: openDescription },
+          { label: t('enterNutritionManually'), onPress: () => { discardCapture(); addManualMeal(); } },
+          { label: t('cancel'), role: 'cancel' },
+        ] })}
         onNextDay={() => canGoNext && setSelectedDay(nextDay(selectedDay))}
         onOpen={(meal) => openMeal(meal.id)}
         onMealLongPress={showMealActions}

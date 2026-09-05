@@ -1,8 +1,10 @@
+import { beginForegroundWork } from './foregroundWork';
+import { hasMealInput } from '../ai/mealInput';
 import { File } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import { AppState, Platform } from 'react-native';
 
-import { analyzeMealPhotos, correctMealAnalysis, refineMealAnalysis } from '../ai/piClient';
+import { analyzeMeal, correctMealAnalysis, refineMealAnalysis } from '../ai/piClient';
 import {
   getMeal,
   getPreference,
@@ -125,17 +127,19 @@ async function notifyFailure(mealId: string): Promise<void> {
 export async function processMeal(id: string): Promise<void> {
   if (processing.has(id)) return;
   processing.add(id);
+  let release: (() => Promise<void>) | undefined;
   try {
+    release = await beginForegroundWork();
     const meal = await getMeal(id);
-    if (!meal || meal.photos.length === 0) throw new Error('Meal photos are unavailable');
+    if (!meal || !hasMealInput(meal)) throw new Error('Meal description or photos are unavailable');
     await setMealStatus(id, 'analyzing');
-    setMealActivity(id, 'reading_photos');
+    setMealActivity(id, meal.photos.length > 0 ? 'reading_photos' : 'reviewing_meal');
     const photos = await Promise.all(meal.photos.map(async (photo) => ({
       base64: await new File(photo.uri).base64(),
       mimeType: photo.mimeType,
     })));
     setMealActivity(id, 'reviewing_meal');
-    const result = await analyzeMealPhotos({
+    const result = await analyzeMeal({
       mealId: id,
       photos,
       note: meal.note,
@@ -155,6 +159,7 @@ export async function processMeal(id: string): Promise<void> {
     const terminal = await recordMealFailure(id, error instanceof Error ? error.message : String(error));
     if (terminal) await notifyFailure(id);
   } finally {
+    await release?.().catch(() => undefined);
     setMealActivity(id);
     processing.delete(id);
   }
@@ -162,7 +167,11 @@ export async function processMeal(id: string): Promise<void> {
 
 export async function processPendingMeals(): Promise<void> {
   const meals = await listProcessableMeals();
-  for (const meal of meals) await processMeal(meal.id);
+  if (!meals.length) return;
+  const release = await beginForegroundWork();
+  try {
+    for (const meal of meals) await processMeal(meal.id);
+  } finally { await release().catch(() => undefined); }
 }
 
 export async function answerMealClarification(id: string, answer: string, answeredInThreadId?: string, signal?: AbortSignal): Promise<void> {
@@ -176,7 +185,9 @@ export async function answerMealClarification(id: string, answer: string, answer
   if (!answeredInThreadId) await appendInlineMealAnswer(thread.id, answer);
 
   await setMealStatus(id, 'analyzing');
+  let release: (() => Promise<void>) | undefined;
   try {
+    release = await beginForegroundWork();
     setMealActivity(id, 'reviewing_meal');
     // Clarification is a fresh provider request: the prior analysis does not
     // carry image bytes forward. Reload the saved meal's visual evidence.
@@ -211,6 +222,7 @@ export async function answerMealClarification(id: string, answer: string, answer
     );
     throw error;
   } finally {
+    await release?.().catch(() => undefined);
     setMealActivity(id);
   }
 }
@@ -220,7 +232,9 @@ export async function correctSavedMeal(id: string, correction: string): Promise<
   if (!meal?.analysis) return;
 
   await setMealStatus(id, 'analyzing');
+  let release: (() => Promise<void>) | undefined;
   try {
+    release = await beginForegroundWork();
     setMealActivity(id, 'reviewing_meal');
     const result = await correctMealAnalysis({
       mealId: id,
@@ -237,23 +251,26 @@ export async function correctSavedMeal(id: string, correction: string): Promise<
     await setMealStatus(id, meal.status, error instanceof Error ? error.message : String(error));
     throw error;
   } finally {
+    await release?.().catch(() => undefined);
     setMealActivity(id);
   }
 }
 
-/** Re-runs the canonical meal analyzer so Assistant corrections can use saved visual evidence. */
+/** Re-runs the canonical meal analyzer so Assistant corrections can use saved descriptions and photos. */
 export async function reanalyzeSavedMeal(id: string, instruction?: string): Promise<void> {
   const meal = await getMeal(id);
   if (!meal) throw new Error('Meal was not found');
-  if (meal.photos.length === 0) {
+  if (!hasMealInput(meal)) {
     if (meal.analysis && instruction?.trim()) return correctSavedMeal(id, instruction);
-    throw new Error('This meal has no saved photos to analyze');
+    throw new Error('This meal has no saved description or photos to analyze');
   }
   if (processing.has(id)) throw new Error('This meal is already being analyzed');
   processing.add(id);
   await setMealStatus(id, 'analyzing');
+  let release: (() => Promise<void>) | undefined;
   try {
-    setMealActivity(id, 'reading_photos');
+    release = await beginForegroundWork();
+    setMealActivity(id, meal.photos.length > 0 ? 'reading_photos' : 'reviewing_meal');
     const photos = await Promise.all(meal.photos.map(async (photo) => ({
       base64: await new File(photo.uri).base64(),
       mimeType: photo.mimeType,
@@ -261,7 +278,7 @@ export async function reanalyzeSavedMeal(id: string, instruction?: string): Prom
     const note = [meal.note, instruction?.trim() ? `User correction: ${instruction.trim()}` : '']
       .filter(Boolean).join('\n');
     setMealActivity(id, 'reviewing_meal');
-    const result = await analyzeMealPhotos({
+    const result = await analyzeMeal({
       mealId: id,
       photos,
       note,
@@ -275,6 +292,7 @@ export async function reanalyzeSavedMeal(id: string, instruction?: string): Prom
     await setMealStatus(id, meal.status, error instanceof Error ? error.message : String(error));
     throw error;
   } finally {
+    await release?.().catch(() => undefined);
     setMealActivity(id);
     processing.delete(id);
   }

@@ -62,7 +62,7 @@ export function CaptureReviewScreen(props: {
           </View>
 
           <View style={styles.previewFrame}>
-            {photo && <Image source={{ uri: photo.uri }} resizeMode="cover" style={styles.preview} />}
+            {photo && <Image source={{ uri: photo.uri }} resizeMode="contain" style={styles.preview} />}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={t('removePhoto')}

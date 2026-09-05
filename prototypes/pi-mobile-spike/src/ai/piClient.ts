@@ -1,3 +1,5 @@
+import { requestWithDeadline } from '../services/requestDeadline';
+import { mealInputContent } from './mealInput';
 import { AppState } from 'react-native';
 import { retryConnection } from '../services/connectionRecovery';
 import { waitForConnectionRecovery } from '../services/foregroundRecovery';
@@ -441,17 +443,19 @@ async function completeMealRequest(
   options: ModelsSimpleStreamOptions,
   onActivity?: (activity: MealModelActivity) => void,
 ): Promise<AssistantMessage> {
-  return retryConnection(async () => {
+  return retryConnection(() => requestWithDeadline(async signal => {
   let answerStarted = false;
   const stream = models.streamSimple(model, context, {
     ...options,
+    signal,
     fetch: options.onPayload
       ? fetchWithProviderActivity((activity) => {
-        if (!answerStarted && activity.status === 'active') onActivity?.('web_search');
+        if (!signal.aborted && !answerStarted && activity.status === 'active') onActivity?.('web_search');
       })
       : options.fetch,
   });
   for await (const event of stream) {
+    if (signal.aborted) throw new Error('Request cancelled');
     if (event.type === 'thinking_start') onActivity?.('thinking');
     else if (event.type === 'text_start') {
       answerStarted = true;
@@ -461,20 +465,21 @@ async function completeMealRequest(
   const result = await stream.result();
   if (result.stopReason === 'error' || result.stopReason === 'aborted') throw new Error(result.errorMessage ?? 'Meal request failed');
   return result;
-  }, () => waitForConnectionRecovery(options.signal));
+  }, options.signal), () => waitForConnectionRecovery(options.signal));
 }
 
-export async function analyzeMealPhotos(input: {
+export async function analyzeMeal(input: {
   photos: ImageInput[];
   note?: string;
   language: 'English' | 'Russian';
   mealId: string;
   onActivity?: (activity: MealModelActivity) => void;
 }): Promise<{ model: string; text: string }> {
-  if (input.photos.length === 0) throw new Error('At least one meal photo is required');
-  const model = await imageModel();
+  const content = mealInputContent(input);
+  const model = input.photos.length > 0 ? await imageModel() : await textModel();
   const requestOptions = await modelRequestOptions(model);
   const startedAt = Date.now();
+  await appendDiagnosticEvent({ id: `${startedAt.toString(36)}-analysis-start`, createdAt: startedAt, operation: 'analyze', phase: 'started', mealId: input.mealId, appState: AppState.currentState, provider: model.provider, model: model.id, api: model.api, promptVersion: MEAL_ANALYSIS_PROMPT_VERSION, webSearchEnabled: await getWebSearchEnabled(model.provider), durationMs: 0 });
   let response: AssistantMessage;
   try {
     response = await completeMealRequest(
@@ -484,19 +489,7 @@ export async function analyzeMealPhotos(input: {
         messages: [
           {
             role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: input.note?.trim()
-                  ? `Analyze this complete meal. User note: ${input.note.trim()}`
-                  : 'Analyze this complete meal.',
-              },
-              ...input.photos.map((photo) => ({
-                type: 'image' as const,
-                data: photo.base64,
-                mimeType: photo.mimeType,
-              })),
-            ],
+            content,
             timestamp: Date.now(),
           },
         ],

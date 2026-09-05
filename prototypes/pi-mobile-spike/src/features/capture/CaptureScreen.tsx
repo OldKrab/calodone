@@ -1,3 +1,4 @@
+import { chooseZoom, parseCameraLenses, zoomStops, type CameraLens } from './cameraZoom';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -5,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -20,7 +22,7 @@ import { t } from '../../i18n';
 export function CaptureScreen(props: {
   photos: MealPhoto[];
   error?: string;
-  onAddManual: () => void;
+  onDescribe: () => void;
   onCancel: () => void;
   onCaptured: (photo: MealPhoto) => void;
 }) {
@@ -28,6 +30,28 @@ export function CaptureScreen(props: {
   const [permission, requestPermission] = useCameraPermissions();
   const [ready, setReady] = useState(false);
   const [taking, setTaking] = useState(false);
+  const [lenses, setLenses] = useState<CameraLens[]>([]);
+  const [factor, setFactor] = useState(1);
+  const zoom = chooseZoom(lenses, factor);
+  const pinch = useRef({ distance: 0, factor: 1 });
+  const distance = (touches: readonly { pageX: number; pageY: number }[]) => touches.length < 2 ? 0 : Math.hypot(touches[0].pageX - touches[1].pageX, touches[0].pageY - touches[1].pageY);
+  const setZoom = (value: number) => {
+    const next = chooseZoom(lenses, value);
+    if (next && !taking) setFactor(next.factor);
+  };
+  const gestures = PanResponder.create({
+    onStartShouldSetPanResponder: event => event.nativeEvent.touches.length === 2 && !taking,
+    onMoveShouldSetPanResponder: event => event.nativeEvent.touches.length === 2 && !taking,
+    onPanResponderGrant: event => { pinch.current = { distance: distance(event.nativeEvent.touches), factor }; },
+    onPanResponderMove: event => {
+      const current = distance(event.nativeEvent.touches);
+      if (current && pinch.current.distance) setZoom(pinch.current.factor * current / pinch.current.distance);
+    },
+  });
+  const cameraReady = async () => {
+    setReady(true);
+    try { setLenses(parseCameraLenses(await camera.current?.getAvailableLensesAsync() ?? [])); } catch { setLenses([]); }
+  };
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [error, setError] = useState('');
 
@@ -36,7 +60,7 @@ export function CaptureScreen(props: {
     setTaking(true);
     setError('');
     try {
-      const result = await camera.current?.takePictureAsync({ quality: 0.72 });
+      const result = await camera.current?.takePictureAsync({ quality: 0.72, shutterSound: false });
       if (!result?.uri) throw new Error('Camera returned no image');
       props.onCaptured(newPhoto(result.uri, 'image/jpeg'));
     } catch {
@@ -98,11 +122,11 @@ export function CaptureScreen(props: {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          onPress={props.onAddManual}
+          onPress={props.onDescribe}
           style={({ pressed }) => [styles.galleryPermissionAction, pressed && styles.pressed]}
         >
           <Ionicons name="create-outline" size={20} color={color.action} />
-          <Text style={styles.galleryPermissionText}>{t('addWithoutPhoto')}</Text>
+          <Text style={styles.galleryPermissionText}>{t('describeMeal')}</Text>
         </Pressable>
         <Pressable accessibilityRole="button" onPress={props.onCancel} hitSlop={12}>
           <Text style={styles.cancel}>{t('close')}</Text>
@@ -117,10 +141,15 @@ export function CaptureScreen(props: {
       <CameraView
         ref={camera}
         facing="back"
+        ratio="4:3"
+        selectedLens={zoom?.id}
+        zoom={zoom?.zoom ?? 0}
         flash={flash}
-        onCameraReady={() => setReady(true)}
+        onCameraReady={() => void cameraReady()}
+        onMountError={() => { setReady(false); setError(t('captureError')); }}
         style={StyleSheet.absoluteFill}
       />
+      <View style={StyleSheet.absoluteFill} {...gestures.panHandlers} />
       <SafeAreaView style={styles.chrome} pointerEvents="box-none">
         <View style={styles.topBar}>
           <IconButton icon="close" label={t('close')} inverted onPress={props.onCancel} />
@@ -133,6 +162,13 @@ export function CaptureScreen(props: {
             onPress={() => setFlash((current) => current === 'on' ? 'off' : 'on')}
           />
         </View>
+        <View pointerEvents="box-none">
+          {lenses.length > 0 && <View style={styles.zoomRow}>
+            <Pressable accessibilityRole="button" accessibilityLabel={t('zoomOut')} disabled={taking} onPress={() => setZoom(factor / 1.2)} style={styles.zoomButton}><Text style={styles.zoomText}>−</Text></Pressable>
+            {zoomStops(lenses).map(stop => <Pressable key={stop} accessibilityRole="button" accessibilityLabel={`${stop}×`} accessibilityState={{ selected: Math.abs(factor-stop) < 0.06 }} disabled={taking} onPress={() => setZoom(stop)} style={[styles.zoomButton, Math.abs(factor-stop) < 0.06 && styles.zoomSelected]}><Text style={styles.zoomText}>{stop}×</Text></Pressable>)}
+            <Pressable accessibilityRole="button" accessibilityLabel={t('zoomIn')} disabled={taking} onPress={() => setZoom(factor * 1.2)} style={styles.zoomButton}><Text style={styles.zoomText}>+</Text></Pressable>
+          </View>}
+          {lenses.length > 0 && <Text style={styles.zoomValue}>{factor.toFixed(1)}×</Text>}
         <View style={styles.bottomBar}>
           <Pressable
             accessibilityRole="button"
@@ -161,14 +197,15 @@ export function CaptureScreen(props: {
           ) : (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={t('addWithoutPhoto')}
-              onPress={props.onAddManual}
+              accessibilityLabel={t('describeMeal')}
+              onPress={props.onDescribe}
               style={({ pressed }) => [styles.manualButton, pressed && styles.galleryButtonPressed]}
             >
               <Ionicons name="create-outline" size={23} color={color.cameraText} />
             </Pressable>
           )}
           {(error || props.error) && <Text style={styles.error}>{error || props.error}</Text>}
+        </View>
         </View>
       </SafeAreaView>
     </View>
@@ -181,6 +218,11 @@ function newPhoto(uri: string, mimeType: string): MealPhoto {
 }
 
 const styles = StyleSheet.create({
+  zoomRow: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+  zoomButton: { minWidth: 44, height: 44, borderRadius: 22, backgroundColor: color.cameraChrome, alignItems: 'center', justifyContent: 'center' },
+  zoomSelected: { backgroundColor: color.action },
+  zoomText: { color: color.cameraText, fontSize: 16, fontFamily: type.ticketBold },
+  zoomValue: { color: color.cameraText, textAlign: 'center', fontSize: 12, marginTop: 6 },
   screen: { backgroundColor: color.camera, flex: 1 },
   chrome: { flex: 1, justifyContent: 'space-between' },
   topBar: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingTop: space.sm },
