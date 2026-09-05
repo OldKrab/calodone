@@ -82,7 +82,15 @@ export type CameraDiagnosticEvent = {
   error?: string;
 };
 
-export type DiagnosticEvent = AiDiagnosticEvent | LayoutDiagnosticEvent | LifecycleDiagnosticEvent | CameraDiagnosticEvent;
+export type SearchDiagnosticEvent = {
+  id: string;
+  createdAt: number;
+  operation: 'web_search';
+  activityId: string;
+  status: 'active' | 'complete' | 'error';
+};
+
+export type DiagnosticEvent = AiDiagnosticEvent | LayoutDiagnosticEvent | LifecycleDiagnosticEvent | CameraDiagnosticEvent | SearchDiagnosticEvent;
 
 function fromRow(row: MealRow): Meal {
   const parsedPhotos = JSON.parse(row.photos_json) as Array<Partial<MealPhoto> & Pick<MealPhoto, 'uri' | 'mimeType'>>;

@@ -1,6 +1,8 @@
 import { fetch as expoFetch } from 'expo/fetch';
 
 import { providerActivityFromEvent, type ProviderToolActivity } from './providerActivityEvent';
+import { searchActivityObserver } from './searchDiagnostics';
+import { appendDiagnosticEvent } from '../data/mealRepository';
 
 export type { ProviderToolActivity } from './providerActivityEvent';
 
@@ -11,12 +13,20 @@ export type { ProviderToolActivity } from './providerActivityEvent';
 export function fetchWithProviderActivity(
   onActivity?: (activity: ProviderToolActivity) => void,
 ): typeof globalThis.fetch {
-  if (!onActivity) return expoFetch as typeof globalThis.fetch;
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const response = await expoFetch(input as never, init as never);
     if (response.body && response.headers.get('content-type')?.includes('text/event-stream')) {
       try {
-        void observeEventStream(response.clone() as unknown as Response, onActivity);
+        const record = searchActivityObserver(activity => {
+          void appendDiagnosticEvent({
+            id: `${Date.now().toString(36)}-search-${Math.random().toString(36).slice(2, 8)}`,
+            createdAt: Date.now(), operation: 'web_search', ...activity,
+          }).catch(() => undefined);
+        });
+        void observeEventStream(response.clone() as unknown as Response, activity => {
+          record(activity);
+          onActivity?.(activity);
+        });
       } catch {
         // The model response remains usable if this optional UI observer cannot clone it.
       }
