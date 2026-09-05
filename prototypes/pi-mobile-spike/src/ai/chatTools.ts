@@ -263,12 +263,12 @@ export function createCaloDoneTools(input: {
         mealId: Type.String(), expectedRevision: Type.Number({ minimum: 1 }),
         answer: Type.String({ minLength: 1 }), statusText: activitySchema,
       }, { additionalProperties: false }),
-      execute: async (callId, rawParams) => withReceipt(callId, input.threadId, async () => {
+      execute: async (callId, rawParams, signal) => withReceipt(callId, input.threadId, async () => {
         const params = rawParams as AnswerQuestionParams;
         const before = await requiredMeal(params.mealId);
         requireRevision(before, params.expectedRevision);
         if (!before.analysis?.clarification) throw new Error('This meal has no unanswered clarification question.');
-        await answerMealClarification(before.id, params.answer.trim(), input.threadId);
+        await answerMealClarification(before.id, params.answer.trim(), input.threadId, signal);
         const next = await requiredMeal(before.id);
         const action = await recordChatAction({
           id: actionIdForCall(callId), threadId: input.threadId,

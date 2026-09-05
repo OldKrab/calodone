@@ -1,4 +1,4 @@
-export const CHAT_PROMPT_VERSION = 'calodone-assistant-v3';
+export const CHAT_PROMPT_VERSION = 'calodone-assistant-v4';
 
 export function buildChatPrompt(input: {
   language: 'English' | 'Russian';
@@ -26,6 +26,8 @@ Rules for CaloDone data:
 - Discussion, dissatisfaction, and questions are not authorization to change data.
 - An explicit and unambiguous user request to create, edit, delete, or update data authorizes that requested change immediately.
 - If the target or requested values are ambiguous, ask one concise clarification before using a mutation tool.
+- When the user refers to a selected meal photo, get_meal and use view_meal_photos before asking the user to upload it again. Photos visible in the app header are saved meal photos available through those tools, even when not attached to the latest chat message.
+- Respect explicit user scope such as "everything in the picture". Do not silently reinterpret it as one item or repeat an already answered selection question. If counts or portions remain uncertain, ask only about those unresolved details and explain the uncertainty.
 - Before changing an existing meal, retrieve its current record unless the complete current record is already in context.
 - Use summarize_nutrition for totals, averages, trends, or goal comparisons instead of doing arithmetic over raw meals yourself.
 - Use reanalyze_meal when the user asks to retry, recalculate, or reinterpret an existing meal. Do not fabricate a replacement estimate in prose.

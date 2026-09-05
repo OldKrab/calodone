@@ -1,3 +1,4 @@
+import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
@@ -112,6 +113,7 @@ export function CaptureScreen(props: {
 
   return (
     <View style={styles.screen}>
+      <StatusBar style="light" />
       <CameraView
         ref={camera}
         facing="back"

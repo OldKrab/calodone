@@ -27,6 +27,7 @@ export type AiDiagnosticEvent = {
   id: string;
   createdAt: number;
   operation: 'analyze' | 'clarify' | 'correct' | 'chat';
+  appState?: string;
   mealId?: string;
   threadId?: string;
   provider: string;
@@ -64,7 +65,15 @@ export type LayoutDiagnosticEvent = {
   safeAreaBottom: number;
 };
 
-export type DiagnosticEvent = AiDiagnosticEvent | LayoutDiagnosticEvent;
+export type LifecycleDiagnosticEvent = {
+  id: string;
+  createdAt: number;
+  operation: 'lifecycle';
+  previousState: string;
+  appState: string;
+};
+
+export type DiagnosticEvent = AiDiagnosticEvent | LayoutDiagnosticEvent | LifecycleDiagnosticEvent;
 
 function fromRow(row: MealRow): Meal {
   const parsedPhotos = JSON.parse(row.photos_json) as Array<Partial<MealPhoto> & Pick<MealPhoto, 'uri' | 'mimeType'>>;

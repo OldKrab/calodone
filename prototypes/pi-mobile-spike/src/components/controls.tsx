@@ -16,6 +16,7 @@ export function PrimaryButton(props: {
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={props.label}
+      accessibilityState={{ disabled: Boolean(props.disabled || props.busy), busy: props.busy }}
       disabled={props.disabled || props.busy}
       onPress={props.onPress}
       style={({ pressed }) => [
@@ -51,7 +52,7 @@ export const IconButton = forwardRef<View, {
       ref={ref}
       accessibilityRole="button"
       accessibilityLabel={props.label}
-      accessibilityState={{ selected: props.selected }}
+      accessibilityState={{ selected: props.selected, disabled: props.disabled }}
       disabled={props.disabled}
       hitSlop={8}
       onPress={props.onPress}
@@ -73,17 +74,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: color.action,
     borderRadius: radius.control,
-    height: 56,
+    minHeight: 54,
+    paddingVertical: 14,
     justifyContent: 'center',
     paddingHorizontal: space.lg,
     shadowColor: color.ink,
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
+    shadowOpacity: 0,
     shadowRadius: 5,
-    elevation: 3,
+    elevation: 0,
   },
   primaryDark: { shadowColor: color.camera },
-  primaryText: { color: color.surface, fontFamily: type.ticketBold, fontSize: 19, letterSpacing: 0.25 },
+  primaryText: { color: color.surface, fontFamily: type.ticketBold, fontSize: 16, fontWeight: '600', letterSpacing: 0 },
   buttonContent: { alignItems: 'center', flexDirection: 'row', gap: 9 },
   disabled: { opacity: 0.45 },
   pressed: { backgroundColor: color.actionPressed, transform: [{ translateY: 1 }] },
@@ -95,6 +97,6 @@ const styles = StyleSheet.create({
     width: 48,
   },
   iconButtonInverted: { backgroundColor: color.cameraChrome },
-  iconButtonSelected: { backgroundColor: 'rgba(182, 66, 46, 0.42)' },
+  iconButtonSelected: { backgroundColor: color.action },
   iconPressed: { opacity: 0.72, transform: [{ scale: 0.94 }] },
 });

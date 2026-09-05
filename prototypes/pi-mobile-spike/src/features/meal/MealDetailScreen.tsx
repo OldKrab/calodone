@@ -24,7 +24,7 @@ import { ScreenReveal } from '../../components/ScreenReveal';
 import { color, radius, space, type } from '../../design/tokens';
 import { mealQuestions, type Meal, type MealAnalysis, type MealItem, type MealType, type NutritionTotals } from '../../domain/meal';
 import { displayEnergy, displayWeight, type NutritionUnits } from '../../domain/preferences';
-import { formatNumber, formatTime, t } from '../../i18n';
+import { formatNumber, formatTime, locale, t } from '../../i18n';
 import type { MealActivityStage } from '../../services/mealActivity';
 
 const mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -36,6 +36,7 @@ export function MealDetailScreen(props: {
   activity?: MealActivityStage;
   units: NutritionUnits;
   initialEditing?: boolean;
+  creating?: boolean;
   onBack: () => void;
   onAnswer: (answer: string) => Promise<void>;
   onDelete: () => void;
@@ -103,10 +104,13 @@ export function MealDetailScreen(props: {
   if (!draft) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <Header title={t('mealDetails')} onBack={props.onBack} />
+        <Header title={t('mealDetails')} onBack={props.onBack} actionLabel={props.meal.status === 'failed' ? t('delete') : undefined} onAction={confirmDelete} />
         <View style={styles.loading}>
-          <ActivityIndicator color={color.action} />
+          {props.meal.photos[0] && <Image source={{ uri: props.meal.photos[0].uri }} style={styles.pendingPhoto} />}
+          {props.meal.status !== 'failed' && <ActivityIndicator color={color.action} />}
           <Text style={styles.loadingText}>{props.meal.status === 'failed' ? t('failed') : activityLabel(props.activity)}</Text>
+          <Text style={styles.pendingHelp}>{props.meal.status === 'failed' ? (locale === 'ru' ? 'Не удалось получить оценку. Вернитесь к дневнику, чтобы повторить анализ, или удалите запись.' : 'The estimate could not be completed. Return to your journal to retry, or delete this record.') : (locale === 'ru' ? 'Можно вернуться к дневнику. Результат появится в записи.' : 'You can return to your journal. The result will appear in this record.')}</Text>
+          <PrimaryButton label={locale === 'ru' ? 'К дневнику' : 'Back to journal'} onPress={props.onBack} />
         </View>
       </SafeAreaView>
     );
@@ -117,8 +121,8 @@ export function MealDetailScreen(props: {
       <ScreenReveal>
         <Header
           actionLabel={t(editing ? 'cancel' : 'edit')}
-          title={t('reviewMeal')}
-          onAction={() => { setEditing((value) => !value); setError(''); }}
+          title={props.creating ? t('addMeal') : locale === 'ru' ? (editing ? 'Изменить запись' : 'Приём пищи') : (editing ? 'Edit meal' : 'Meal details')}
+          onAction={() => { if (props.creating) return props.onBack(); setEditing((value) => !value); setError(''); }}
           onBack={props.onBack}
         />
         <ScrollView
@@ -163,14 +167,14 @@ export function MealDetailScreen(props: {
 
         {editing ? (
           <>
-            <Pressable accessibilityRole="button" onPress={props.onAskAssistant} style={styles.editWithAssistant}>
+            {!props.creating && <Pressable accessibilityRole="button" onPress={props.onAskAssistant} style={styles.editWithAssistant}>
               <View style={styles.editWithAssistantIcon}><Ionicons name="sparkles-outline" size={18} color={color.action} /></View>
               <View style={styles.editWithAssistantCopy}>
                 <Text style={styles.editWithAssistantTitle}>{t('editWithAssistant')}</Text>
                 <Text style={styles.editWithAssistantHelp}>{t('editWithAssistantHelp')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={17} color={color.muted} />
-            </Pressable>
+            </Pressable>}
             <MealEditor draft={draft} time={time} onChange={setDraft} onTimeChange={setTime} />
           </>
         ) : (
@@ -179,21 +183,16 @@ export function MealDetailScreen(props: {
 
         {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
 
-        {editing ? (
-          <View style={styles.editActions}>
-            <PrimaryButton label={t('saveChanges')} onPress={save} />
-            <Pressable accessibilityRole="button" onPress={confirmDelete} hitSlop={10}>
-              <Text style={styles.delete}>{t('deleteMeal')}</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <Pressable accessibilityRole="button" onPress={props.onAskAssistant} style={styles.assistantAction}>
-            <Ionicons name="chatbox-ellipses-outline" size={19} color={color.action} />
-            <Text style={styles.assistantActionText}>{t(draft.clarification ? 'discussInAssistant' : 'askAssistant')}</Text>
-            <Ionicons name="chevron-forward" size={17} color={color.muted} />
-          </Pressable>
-        )}
+        {!editing && <Pressable accessibilityRole="button" onPress={props.onAskAssistant} style={styles.assistantAction}>
+          <Ionicons name="chatbubble-outline" size={19} color={color.action} />
+          <Text style={styles.assistantActionText}>{t(draft.clarification ? 'discussInAssistant' : 'askAssistant')}</Text>
+          <Ionicons name="chevron-forward" size={17} color={color.muted} />
+        </Pressable>}
         </ScrollView>
+        {editing && <View style={styles.saveDock}>
+          <PrimaryButton label={t(props.creating ? 'addMeal' : 'saveChanges')} onPress={save} />
+          {!props.creating && <Pressable accessibilityRole="button" onPress={confirmDelete} style={styles.deleteAction}><Text style={styles.delete}>{t('deleteMeal')}</Text></Pressable>}
+        </View>}
       </ScreenReveal>
     </KeyboardSafeArea>
   );
@@ -231,9 +230,9 @@ function Header(props: {
 function MealOverview(props: { meal: Meal; analysis: MealAnalysis; units: NutritionUnits }) {
   const dialog = useAppDialog();
   const { fontScale, width } = useWindowDimensions();
-  const compact = shouldStackFormFields(width, fontScale) || width < 430;
+  const compact = shouldStackFormFields(width, fontScale);
   const [openPhoto, setOpenPhoto] = useState<string>();
-  const photoWidth = Math.max(240, width - (space.md * 4));
+  const photoWidth = props.meal.photos.length === 1 ? Math.min(260, width - 72) : 180;
 
   const savePhoto = async (uri: string) => {
     try {
@@ -268,6 +267,15 @@ function MealOverview(props: { meal: Meal; analysis: MealAnalysis; units: Nutrit
 
   return (
     <>
+      <View style={styles.detailTicket}>
+        <Text style={styles.mealType}>{t(props.analysis.mealType)} · {formatTime(props.meal.capturedAt)}</Text>
+        <Text style={styles.title}>{props.analysis.title}</Text>
+        <View style={styles.totalRow}>
+          <Text style={styles.totalCalories}>{formatNumber(displayEnergy(props.analysis.totals.calories, props.units))} {energyUnit(props.units)}</Text>
+          <Text style={styles.totalMacros}>
+            {t('proteinShort')} {formatMacro(props.analysis.totals.protein, props.units)} · {t('carbsShort')} {formatMacro(props.analysis.totals.carbs, props.units)} · {t('fatShort')} {formatMacro(props.analysis.totals.fat, props.units)}
+          </Text>
+        </View>
       {props.meal.photos.length > 0 && (
         <ScrollView
           horizontal
@@ -302,15 +310,6 @@ function MealOverview(props: { meal: Meal; analysis: MealAnalysis; units: Nutrit
         </View>
       )}
 
-      <View style={styles.detailTicket}>
-        <Text style={styles.mealType}>{t(props.analysis.mealType)} · {formatTime(props.meal.capturedAt)}</Text>
-        <Text style={styles.title}>{props.analysis.title}</Text>
-        <View style={styles.totalRow}>
-          <Text style={styles.totalCalories}>{formatNumber(displayEnergy(props.analysis.totals.calories, props.units))} {energyUnit(props.units)}</Text>
-          <Text style={styles.totalMacros}>
-            {t('proteinShort')} {formatMacro(props.analysis.totals.protein, props.units)} · {t('carbsShort')} {formatMacro(props.analysis.totals.carbs, props.units)} · {t('fatShort')} {formatMacro(props.analysis.totals.fat, props.units)}
-          </Text>
-        </View>
         <View style={styles.items}>
           {props.analysis.items.map((item, index) => (
             <View key={`${item.name}-${index}`} style={[styles.itemRow, compact && styles.itemRowCompact, index > 0 && styles.divider]}>
@@ -355,8 +354,9 @@ function MealEditor(props: {
   onChange: (analysis: MealAnalysis) => void;
   onTimeChange: (time: string) => void;
 }) {
+  const [expandedItem, setExpandedItem] = useState<number | undefined>(0);
   const { fontScale, width } = useWindowDimensions();
-  const compact = shouldStackFormFields(width, fontScale) || width < 430;
+  const compact = shouldStackFormFields(width, fontScale);
   const updateItem = (index: number, field: keyof MealItem, value: string) => {
     const items = props.draft.items.map((item, itemIndex) => {
       if (itemIndex !== index) return item;
@@ -369,6 +369,7 @@ function MealEditor(props: {
   };
 
   const removeItem = (index: number) => {
+    setExpandedItem(undefined);
     const items = props.draft.items.filter((_, itemIndex) => itemIndex !== index);
     props.onChange({ ...props.draft, items, totals: sumItems(items) });
   };
@@ -376,6 +377,7 @@ function MealEditor(props: {
   const addItem = () => {
     const items = [...props.draft.items, { name: '', quantity: '', calories: 0, protein: 0, carbs: 0, fat: 0 }];
     props.onChange({ ...props.draft, items });
+    setExpandedItem(items.length - 1);
   };
 
   return (
@@ -395,21 +397,18 @@ function MealEditor(props: {
         ))}
       </View>
       <View style={[styles.topFields, compact && styles.topFieldsCompact]}>
-        <Field label={t('itemName')} value={props.draft.title} onChange={(title) => props.onChange({ ...props.draft, title })} />
+        <Field label={locale === 'ru' ? 'Название' : 'Meal name'} value={props.draft.title} onChange={(title) => props.onChange({ ...props.draft, title })} />
         <Field keyboard="numbers-and-punctuation" label={t('time')} value={props.time} onChange={props.onTimeChange} fixed={!compact} />
       </View>
 
       <Text style={styles.itemsHeading}>{t('items')}</Text>
       {props.draft.items.map((item, index) => (
         <View key={index} style={styles.itemEditor}>
-          <View style={styles.itemEditorHeader}>
-            <Text style={styles.itemIndex}>{index + 1}</Text>
-            {props.draft.items.length > 1 && (
-              <Pressable accessibilityRole="button" accessibilityLabel={t('removePhoto')} hitSlop={10} onPress={() => removeItem(index)}>
-                <Ionicons name="trash-outline" size={18} color={color.muted} />
-              </Pressable>
-            )}
-          </View>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: expandedItem === index }} onPress={() => setExpandedItem(expandedItem === index ? undefined : index)} style={styles.ingredientHeader}>
+            <View style={{ flex: 1 }}><Text style={styles.ingredientName}>{item.name || (locale === 'ru' ? 'Новый продукт' : 'New ingredient')}</Text><Text style={styles.ingredientMeta}>{item.quantity || (locale === 'ru' ? 'Укажите порцию' : 'Add a portion')} · {formatNumber(item.calories)} {t('kcal')}</Text></View>
+            <Ionicons name={expandedItem === index ? 'chevron-up' : 'chevron-down'} size={18} color={color.action} />
+          </Pressable>
+          {expandedItem === index && <>
           <View style={[styles.topFields, compact && styles.topFieldsCompact]}>
             <Field label={t('itemName')} value={item.name} onChange={(value) => updateItem(index, 'name', value)} />
             <Field label={t('quantity')} value={item.quantity} onChange={(value) => updateItem(index, 'quantity', value)} />
@@ -419,7 +418,7 @@ function MealEditor(props: {
               <Field
                 key={field}
                 keyboard="decimal-pad"
-                label={field === 'calories' ? t('caloriesField') : t(`${field}Short` as 'proteinShort')}
+                label={field === 'calories' ? t('caloriesField') : `${t(field)} (${t('grams')})`}
                 nutrition
                 stacked={compact}
                 value={String(item[field])}
@@ -427,6 +426,8 @@ function MealEditor(props: {
               />
             ))}
           </View>
+          {props.draft.items.length > 1 && <Pressable accessibilityRole="button" accessibilityLabel={locale === 'ru' ? 'Удалить продукт' : 'Remove ingredient'} onPress={() => removeItem(index)} style={styles.removeIngredient}><Ionicons name="trash-outline" size={17} color={color.error} /><Text style={{ color: color.error, fontSize: 13 }}>{locale === 'ru' ? 'Удалить продукт' : 'Remove ingredient'}</Text></Pressable>}
+          </>}
         </View>
       ))}
       <Pressable accessibilityRole="button" onPress={addItem} style={styles.addItem}>
@@ -451,6 +452,7 @@ function Field(props: {
     <View style={[styles.field, props.fixed && styles.fieldFixed, props.nutrition && styles.fieldNutrition, props.stacked && styles.fieldStacked]}>
       <Text style={styles.fieldLabel}>{props.label}</Text>
       <TextInput
+        accessibilityLabel={props.label}
         keyboardType={props.keyboard ?? 'default'}
         multiline={!props.nutrition && props.keyboard !== 'numbers-and-punctuation'}
         onChangeText={props.onChange}
@@ -486,6 +488,12 @@ function formatMacro(grams: number, units: NutritionUnits): string {
 }
 
 const styles = StyleSheet.create({
+  saveDock: { paddingHorizontal: 20, paddingTop: 10, backgroundColor: color.canvas, borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth },
+  deleteAction: { alignItems: 'center', justifyContent: 'center', minHeight: 48 },
+  ingredientHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 52, paddingBottom: 10 },
+  ingredientName: { color: color.ink, fontFamily: type.ticket, fontSize: 15, lineHeight: 21 },
+  ingredientMeta: { color: color.muted, fontSize: 12, marginTop: 4 },
+  removeIngredient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 7, minHeight: 48, marginTop: 6 },
   safeArea: { backgroundColor: color.canvas, flex: 1 },
   scroll: { flex: 1 },
   header: { alignItems: 'center', flexDirection: 'row', height: 64, justifyContent: 'space-between', paddingHorizontal: space.md },
@@ -495,25 +503,27 @@ const styles = StyleSheet.create({
   headerActionButton: { alignItems: 'flex-end', justifyContent: 'center', minHeight: 48, maxWidth: 88 },
   headerAction: { color: color.action, fontFamily: type.ticketBold, fontSize: 15, textAlign: 'right' },
   content: { paddingBottom: 48, paddingHorizontal: space.md, paddingTop: space.sm },
-  loading: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  loading: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: 28, gap: 16 },
+  pendingPhoto: { width: 160, height: 160, borderRadius: 24, marginBottom: 12 },
+  pendingHelp: { color: color.muted, fontSize: 15, lineHeight: 23, textAlign: 'center', marginBottom: 12 },
   loadingText: { color: color.muted, fontSize: 14, marginTop: space.sm },
   photoGallery: { gap: space.sm, paddingBottom: space.md },
-  mealPhoto: { backgroundColor: color.camera, borderRadius: radius.image, height: 245 },
+  mealPhoto: { backgroundColor: color.camera, borderRadius: radius.image, height: 138 },
   photoIndex: { backgroundColor: color.cameraChrome, borderRadius: radius.round, bottom: space.sm, paddingHorizontal: 9, paddingVertical: 5, position: 'absolute', right: space.sm },
   photoIndexText: { color: color.cameraText, fontFamily: type.ticketBold, fontSize: 12 },
-  noteBlock: { borderLeftColor: color.action, borderLeftWidth: 2, marginBottom: space.md, paddingHorizontal: 12, paddingVertical: 2 },
+  noteBlock: { backgroundColor: color.actionSoft, borderRadius: 12, marginBottom: space.md, paddingHorizontal: 12, paddingVertical: 2 },
   noteLabel: { color: color.action, fontFamily: type.ticketBold, fontSize: 13, letterSpacing: 0.5 },
   noteText: { color: color.ink, fontSize: 15, lineHeight: 21, marginTop: 3 },
   photoModal: { backgroundColor: color.camera, flex: 1, padding: space.md },
   fullPhoto: { flex: 1, width: '100%' },
   fullPhotoImage: { height: '100%', width: '100%' },
-  detailTicket: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, padding: space.md },
+  detailTicket: { paddingHorizontal: 4 },
   mealType: { color: color.muted, fontFamily: type.ticket, fontSize: 14 },
-  title: { color: color.ink, fontFamily: type.ticketBold, fontSize: 31, lineHeight: 32, marginTop: 4 },
-  totalRow: { marginTop: space.lg },
+  title: { color: color.ink, fontFamily: type.ticketBold, fontSize: 25, lineHeight: 31, marginTop: 4 },
+  totalRow: { marginTop: 14, marginBottom: 20, paddingBottom: 18, borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth },
   totalCalories: { color: color.ink, fontFamily: type.ticketBold, fontSize: 23 },
   totalMacros: { color: color.muted, fontSize: 13, marginTop: 4 },
-  items: { marginTop: space.xl },
+  items: { marginTop: 12 },
   itemRow: { alignItems: 'flex-start', flexDirection: 'row', gap: space.md, paddingVertical: 13 },
   itemRowCompact: { flexDirection: 'column', gap: space.sm },
   divider: { borderTopColor: color.line, borderTopWidth: 1, borderStyle: 'dashed' },
@@ -526,14 +536,14 @@ const styles = StyleSheet.create({
   itemMacros: { color: color.muted, flexShrink: 1, fontSize: 11, marginTop: 4, textAlign: 'right' },
   assistantAction: { alignItems: 'center', borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: space.sm, marginTop: space.lg, minHeight: 52, paddingHorizontal: space.xs },
   assistantActionText: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 17 },
-  editWithAssistant: { alignItems: 'center', backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: space.sm, marginBottom: space.lg, minHeight: 72, padding: space.sm },
+  editWithAssistant: { alignItems: 'center', backgroundColor: color.actionSoft, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: space.sm, marginBottom: 18, minHeight: 60, padding: space.sm },
   editWithAssistantIcon: { alignItems: 'center', backgroundColor: color.surfacePressed, borderRadius: radius.control, height: 42, justifyContent: 'center', width: 42 },
   editWithAssistantCopy: { flex: 1, minWidth: 0 },
-  editWithAssistantTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 17 },
+  editWithAssistantTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 15 },
   editWithAssistantHelp: { color: color.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
-  clarification: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderStyle: 'dashed', borderWidth: 1, marginBottom: space.md, padding: space.md },
+  clarification: { backgroundColor: color.attentionSoft, borderColor: color.line, borderRadius: radius.surface, borderStyle: 'solid', borderWidth: 1, marginBottom: space.md, padding: space.md },
   clarificationLabel: { color: color.pending, fontFamily: type.ticketBold, fontSize: 14, letterSpacing: 0.4 },
-  clarificationQuestion: { color: color.ink, fontSize: 17, fontWeight: '600', lineHeight: 23, marginTop: space.sm },
+  clarificationQuestion: { color: color.ink, fontSize: 15, fontWeight: '400', lineHeight: 22, marginTop: space.sm },
   clarificationRow: { alignItems: 'center', flexDirection: 'row', gap: space.sm, marginTop: space.md },
   clarificationInput: { backgroundColor: color.canvas, borderRadius: radius.control, color: color.ink, flex: 1, fontSize: 15, height: 50, paddingHorizontal: 14 },
   answerInChat: { alignItems: 'center', borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: space.sm, marginTop: space.md, minHeight: 42, paddingTop: space.sm },
@@ -541,7 +551,7 @@ const styles = StyleSheet.create({
   clarificationActivity: { color: color.muted, fontSize: 12, marginTop: space.sm },
   correctionToggle: { borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', marginTop: space.lg, minHeight: 50, paddingHorizontal: space.md },
   correctionToggleText: { color: color.action, fontFamily: type.ticketBold, fontSize: 16, textAlign: 'center' },
-  correction: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderStyle: 'dashed', borderWidth: 1, marginTop: space.sm, padding: space.md },
+  correction: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderStyle: 'solid', borderWidth: 1, marginTop: space.sm, padding: space.md },
   correctionLabel: { gap: 3 },
   correctionTitle: { color: color.action, fontFamily: type.ticketBold, fontSize: 16, letterSpacing: 0.4 },
   correctionHelp: { color: color.muted, fontSize: 12, lineHeight: 17 },
@@ -553,20 +563,20 @@ const styles = StyleSheet.create({
   error: { color: color.error, fontSize: 13, marginTop: space.md },
   fieldLabel: { color: color.muted, fontSize: 12, fontWeight: '600', marginBottom: 6 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginBottom: space.lg },
-  chip: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', minHeight: 48, paddingHorizontal: 14 },
-  chipSelected: { backgroundColor: color.ink },
-  chipText: { color: color.ink, fontFamily: type.ticket, fontSize: 15 },
+  chip: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', minHeight: 48, paddingHorizontal: 12 },
+  chipSelected: { backgroundColor: color.action },
+  chipText: { color: color.ink, fontFamily: type.ticket, fontSize: 13 },
   chipTextSelected: { color: color.surface },
   topFields: { flexDirection: 'row', gap: space.sm },
   topFieldsCompact: { flexDirection: 'column' },
   field: { flex: 1, minWidth: 0 },
   fieldFixed: { flex: 0, width: 112 },
-  fieldNutrition: { flexBasis: '47%', minWidth: 112 },
+  fieldNutrition: { flexBasis: '47%', minWidth: 100 },
   fieldStacked: { flexBasis: '47%' },
   fieldInput: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.control, borderWidth: 1, color: color.ink, fontSize: 15, minHeight: 50, minWidth: 0, paddingHorizontal: 13, width: '100%' },
   fieldInputMultiline: { minHeight: 56, paddingVertical: 10 },
   itemsHeading: { color: color.ink, fontFamily: type.ticketBold, fontSize: 22, marginBottom: space.md, marginTop: space.xl },
-  itemEditor: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, marginBottom: space.md, padding: space.md },
+  itemEditor: { backgroundColor: color.surface, borderRadius: radius.surface, marginBottom: 10, padding: 14 },
   itemEditorHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: space.sm },
   itemIndex: { color: color.muted, fontSize: 12, fontWeight: '700' },
   nutritionFields: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.md },
