@@ -10,12 +10,14 @@ const fixture = { messages: [{ role: 'chatUser', text: 'Everything shown', attac
 (globalThis as any).__inlineFixture = fixture;
 const sources: Record<string, string> = {
   './foregroundRecovery': 'export const waitForConnectionRecovery=async()=>{};',
+  './foregroundWork': 'export const beginForegroundWork=async()=>async()=>{};',
   'react-native': 'export const AppState={currentState:"active"};',
   'expo-file-system': 'export class File {}',
   '../ai/piClient': `export async function createChatAgent({messages}) {
     return {state:{messages,isStreaming:false}, replaceMessages(messages){this.state.messages=messages},
-      subscribe(listener){globalThis.__inlineFixture.listener=listener;return ()=>{}}, abort(){}, async waitForIdle(){}, async prompt(message){
+      subscribe(listener){globalThis.__inlineFixture.listener=listener;return ()=>{}}, abort(){globalThis.__inlineFixture.aborts=(globalThis.__inlineFixture.aborts||0)+1}, async waitForIdle(){}, async prompt(message){
         const f=globalThis.__inlineFixture; f.prompts++;
+        if(f.hold){this.state.messages.push(message);await f.hold;this.state.messages.push({role:'assistant',content:[{type:'text',text:'Updated to 350 g'}],stopReason:'stop'});return;}
         if(f.failPrompt){
           this.state.messages.push(message,{role:'toolResult',toolCallId:'already-saved',content:[]},
             {role:'assistant',stopReason:'error',errorMessage:'Software caused connection abort'});
@@ -105,4 +107,26 @@ test('execution events distinguish running, completed, and cancelled actions', a
     event({type:'tool_execution_end',toolCallId:'b',isError:true});
     assert.equal(snapshots.at(-1).toolExecutions.b.status,'cancelled');
   } finally {await session.close();}
+});
+
+test('leaving and reopening chat retains the pending turn and its eventual answer', async () => {
+  fixture.messages=[]; fixture.failPrompt=false; fixture.prompts=0;
+  let finish!:()=>void;
+  (fixture as any).hold=new Promise<void>(resolve=>{finish=resolve});
+  const input={thread:{id:'thread-navigation',title:'Meal',purpose:'meal' as const,createdAt:1,updatedAt:1},onDataChanged:async()=>{}};
+  const original=await openChatSession({...input,onChanged:()=>{}});
+  const turn=original.send('Actually 350 g',[]);
+  await new Promise(resolve=>setImmediate(resolve));
+  const aborts=(fixture as any).aborts||0;
+  await original.close();
+  assert.equal((fixture as any).aborts||0,aborts,'leaving the screen must not cancel inference');
+  const snapshots:any[]=[];
+  const reopened=await openChatSession({...input,onChanged:s=>snapshots.push(s)});
+  assert.equal(snapshots.at(-1).busy,true);
+  finish(); await turn;
+  assert.equal(fixture.prompts,1);
+  assert.equal(snapshots.at(-1).messages.at(-1).content[0].text,'Updated to 350 g');
+  assert.equal(snapshots.at(-1).busy,false);
+  (fixture as any).hold=undefined;
+  await reopened.close();
 });

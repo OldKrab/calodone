@@ -24,6 +24,7 @@ import { continuationMessages, isConnectionError } from './connectionRecovery';
 import { waitForConnectionRecovery } from './foregroundRecovery';
 import { subscribeMealActivity, type MealActivityStage } from './mealActivity';
 import { acquireChatSessionLease, subscribeToChatAgent } from './chatAgentEvents';
+import { beginForegroundWork } from './foregroundWork';
 
 export type ChatSessionSnapshot = {
   messages: AgentMessage[];
@@ -41,6 +42,7 @@ export type ChatSession = {
   send(text: string, attachments: ChatAttachment[]): Promise<void>;
   retry(): Promise<void>;
   abort(): void;
+  /** Detach this screen. An in-flight turn remains owned by the conversation. */
   close(): Promise<void>;
 };
 
@@ -52,7 +54,85 @@ type OpenChatSessionInput = {
   onDataChanged: () => Promise<void>;
 };
 
+type RetainedSession = {
+  session: ChatSession;
+  listeners: Set<OpenChatSessionInput['onChanged']>;
+  snapshot?: ChatSessionSnapshot;
+  running: boolean;
+  publish(): void;
+  disposeIfIdle(): Promise<void>;
+};
+const retainedSessions = new Map<string, Promise<RetainedSession>>();
+
+/** Screens observe a conversation; navigation must never act as the Stop button.
+ * Keep the agent until its turn settles, allowing a new screen to reattach. */
 export async function openChatSession(input: OpenChatSessionInput): Promise<ChatSession> {
+  let pending = retainedSessions.get(input.thread.id);
+  if (!pending) {
+    pending = createRetainedSession(input);
+    retainedSessions.set(input.thread.id, pending);
+  }
+  const entry = await pending;
+  let attached = true;
+  entry.listeners.add(input.onChanged);
+  entry.publish();
+  const run = async (action: () => Promise<void>) => {
+    if (!attached || entry.running || entry.snapshot?.mealActivity) return;
+    entry.running = true;
+    entry.publish();
+    let release: (() => Promise<void>) | undefined;
+    try {
+      release = await beginForegroundWork();
+      await action();
+    } finally {
+      await release?.().catch(() => undefined);
+      entry.running = false;
+      entry.publish();
+      await entry.disposeIfIdle();
+    }
+  };
+  return {
+    send: (text, attachments) => run(() => entry.session.send(text, attachments)),
+    retry: () => run(() => entry.session.retry()),
+    abort: () => { if (attached) entry.session.abort(); },
+    close: async () => {
+      attached = false;
+      entry.listeners.delete(input.onChanged);
+      await entry.disposeIfIdle();
+    },
+  };
+}
+
+async function createRetainedSession(input: OpenChatSessionInput): Promise<RetainedSession> {
+  let disposed = false;
+  const entry: RetainedSession = {
+    session: undefined as unknown as ChatSession,
+    listeners: new Set(), running: false,
+    publish() {
+      if (entry.snapshot) for (const listener of entry.listeners) {
+        listener({ ...entry.snapshot, busy: entry.running || entry.snapshot.busy });
+      }
+    },
+    async disposeIfIdle() {
+      if (disposed || entry.running || entry.listeners.size) return;
+      disposed = true;
+      retainedSessions.delete(input.thread.id);
+      await entry.session.close();
+    },
+  };
+  try {
+    entry.session = await openOwnedChatSession({ ...input, onChanged: snapshot => {
+      entry.snapshot = snapshot;
+      entry.publish();
+    } });
+    return entry;
+  } catch (error) {
+    retainedSessions.delete(input.thread.id);
+    throw error;
+  }
+}
+
+async function openOwnedChatSession(input: OpenChatSessionInput): Promise<ChatSession> {
   const releaseLease = await acquireChatSessionLease(input.thread.id);
   try {
     return await createOpenChatSession(input, releaseLease);
