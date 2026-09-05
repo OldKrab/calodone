@@ -24,7 +24,7 @@ import { ScreenReveal } from '../../components/ScreenReveal';
 import { color, radius, space, type } from '../../design/tokens';
 import { mealQuestions, type Meal, type MealAnalysis, type MealItem, type MealType, type NutritionTotals } from '../../domain/meal';
 import { displayEnergy, displayWeight, type NutritionUnits } from '../../domain/preferences';
-import { mealWeightGrams } from '../../domain/mealWeight';
+import { caloriesPer100Grams, mealWeightGrams } from '../../domain/mealWeight';
 import { formatNumber, formatTime, locale, t } from '../../i18n';
 import type { MealActivityStage } from '../../services/mealActivity';
 
@@ -318,11 +318,16 @@ function MealOverview(props: { meal: Meal; analysis: MealAnalysis; units: Nutrit
       )}
 
         <View style={styles.items}>
-          {props.analysis.items.map((item, index) => (
+          {props.analysis.items.map((item, index) => {
+            const per100g = caloriesPer100Grams(item.calories, item.quantity);
+            return (
             <View key={`${item.name}-${index}`} style={[styles.itemRow, compact && styles.itemRowCompact, index > 0 && styles.divider]}>
               <View style={styles.itemCopy}>
                 <Text style={styles.itemName}>{item.name}</Text>
                 <Text style={styles.itemQuantity}>{item.quantity}</Text>
+                <Text style={styles.itemQuantity}>
+                  {per100g === null ? t('per100gUnknown') : `≈ ${formatNumber(displayEnergy(per100g, props.units))} ${energyUnit(props.units)} ${t('per100g')}`}
+                </Text>
               </View>
               <View style={[styles.itemNutrition, compact && styles.itemNutritionCompact]}>
                 <Text style={styles.itemCalories}>{formatNumber(displayEnergy(item.calories, props.units))} {energyUnit(props.units)}</Text>
@@ -331,7 +336,7 @@ function MealOverview(props: { meal: Meal; analysis: MealAnalysis; units: Nutrit
                 </Text>
               </View>
             </View>
-          ))}
+          ); })}
         </View>
       </View>
 

@@ -1,5 +1,6 @@
 const copy = {
   en: {
+    per100g: 'per 100 g', per100gUnknown: 'Per 100 g: mass needed',
     saveDiagnostics: 'Save diagnostics', diagnosticsSaved: 'Diagnostics saved',
     zoomIn: 'Zoom in', zoomOut: 'Zoom out',
     describeMeal: 'Describe meal', mealDescription: 'What did you eat?',
@@ -107,6 +108,7 @@ const copy = {
     version: 'Version', openSource: 'Open source',
   },
   ru: {
+    per100g: 'на 100 г', per100gUnknown: 'На 100 г: нужна масса',
     saveDiagnostics: 'Сохранить диагностику', diagnosticsSaved: 'Диагностика сохранена',
     zoomIn: 'Приблизить', zoomOut: 'Отдалить',
     describeMeal: 'Описать еду', mealDescription: 'Что вы съели?',
