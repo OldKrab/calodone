@@ -15,7 +15,7 @@ import { IconButton, PrimaryButton } from '../../components/controls';
 import { KeyboardSafeArea } from '../../components/KeyboardSafeArea';
 import { color, motion, radius, space, type } from '../../design/tokens';
 import type { MealPhoto } from '../../domain/meal';
-import { formatPhotoCount, t } from '../../i18n';
+import { formatPhotoCount, locale, t } from '../../i18n';
 
 export function CaptureReviewScreen(props: {
   photos: MealPhoto[];
@@ -57,7 +57,7 @@ export function CaptureReviewScreen(props: {
         ]}>
           <View style={styles.header}>
             <IconButton icon="close" inverted label={t('close')} onPress={props.onCancel} />
-            <Text adjustsFontSizeToFit minimumFontScale={0.86} numberOfLines={1} style={styles.headerTitle}>{t('reviewMeal')}</Text>
+            <Text adjustsFontSizeToFit minimumFontScale={0.86} numberOfLines={1} style={styles.headerTitle}>{locale === 'ru' ? 'Всё видно?' : 'All in the frame?'}</Text>
             <View style={styles.headerSpacer} />
           </View>
 
@@ -73,7 +73,7 @@ export function CaptureReviewScreen(props: {
             </Pressable>
           </View>
 
-          <ScrollView
+          {props.photos.length > 1 && <ScrollView
             horizontal
             contentContainerStyle={styles.thumbnails}
             showsHorizontalScrollIndicator={false}
@@ -89,11 +89,11 @@ export function CaptureReviewScreen(props: {
                   <Image source={{ uri: item.uri }} style={styles.thumbnail} />
                 </Pressable>
               ))}
-          </ScrollView>
+          </ScrollView>}
 
           <View style={styles.composer}>
             <View style={styles.composerHeading}>
-              <Text style={styles.composerLabel}>{t('mealNote')}</Text>
+              <Text style={styles.composerLabel}>{locale === 'ru' ? 'Есть что уточнить?' : 'Anything to add?'}</Text>
               <Text style={styles.composerCount}>{formatPhotoCount(props.photos.length)}</Text>
             </View>
             <TextInput
@@ -108,8 +108,8 @@ export function CaptureReviewScreen(props: {
             <PrimaryButton
               busy={props.sending}
               disabled={props.photos.length === 0}
-              icon="sparkles"
-              label={t('analyzeMeal')}
+              icon="checkmark"
+              label={locale === 'ru' ? 'Добавить и распознать' : 'Log this meal'}
               onPress={props.onSend}
             />
             <Pressable
@@ -132,23 +132,23 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingVertical: space.sm },
   headerSpacer: { width: 48 },
   headerTitle: { color: color.cameraText, flex: 1, fontFamily: type.ticketBold, fontSize: 20, textAlign: 'center' },
-  previewFrame: { backgroundColor: color.camera, borderRadius: radius.image, flex: 1, marginHorizontal: space.lg, overflow: 'hidden' },
+  previewFrame: { backgroundColor: color.camera, borderRadius: radius.image, flex: 1, marginHorizontal: 20, overflow: 'hidden' },
   preview: { height: '100%', width: '100%' },
-  previewRemove: { alignItems: 'center', backgroundColor: color.cameraChrome, borderRadius: radius.control, height: 44, justifyContent: 'center', position: 'absolute', right: space.sm, top: space.sm, width: 44 },
+  previewRemove: { alignItems: 'center', backgroundColor: color.cameraChrome, borderRadius: radius.control, height: 48, justifyContent: 'center', position: 'absolute', right: space.sm, top: space.sm, width: 48 },
   thumbnailsRow: { flexGrow: 0, marginTop: space.md, minHeight: 62 },
-  thumbnails: { alignItems: 'center', gap: space.sm, paddingHorizontal: space.lg },
+  thumbnails: { alignItems: 'center', gap: space.sm, paddingHorizontal: 20 },
   thumbnailFrame: { borderColor: 'transparent', borderRadius: radius.image, borderWidth: 2, height: 58, overflow: 'hidden', width: 58 },
   thumbnailSelected: { borderColor: color.action },
   thumbnail: { height: '100%', width: '100%' },
   addThumbnail: { alignItems: 'center', backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.control, borderStyle: 'dashed', borderWidth: 1, flexDirection: 'row', gap: 7, height: 56, paddingHorizontal: 14 },
   addThumbnailText: { color: color.ink, fontFamily: type.ticket, fontSize: 15 },
-  composer: { backgroundColor: color.cameraChrome, borderColor: color.cameraLine, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, gap: space.sm, marginHorizontal: space.lg, marginBottom: 16, padding: space.md },
-  composerHeading: { alignItems: 'center', borderBottomColor: color.line, borderBottomWidth: 1, borderStyle: 'dashed', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: space.sm },
+  composer: { gap: 10, marginHorizontal: 20, marginBottom: 12, marginTop: 18 },
+  composerHeading: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingBottom: space.sm },
   composerLabel: { color: color.cameraText, fontFamily: type.ticketBold, fontSize: 14, letterSpacing: 0.8 },
   composerCount: { color: color.cameraMuted, fontFamily: type.ticket, fontSize: 13 },
   input: { backgroundColor: color.cameraInput, borderColor: color.cameraLine, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, color: color.cameraText, fontSize: 15, height: 50, paddingHorizontal: 16 },
-  addAngle: { alignItems: 'center', borderColor: color.cameraLine, borderRadius: radius.control, borderWidth: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 50 },
-  addAngleText: { color: color.cameraText, fontFamily: type.ticketBold, fontSize: 16 },
+  addAngle: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 50 },
+  addAngleText: { color: color.cameraText, fontFamily: type.ticketBold, fontSize: 14 },
   error: { color: color.error, fontSize: 13 },
   pressed: { opacity: 0.68, transform: [{ scale: 0.96 }] },
 });

@@ -1,5 +1,8 @@
+import { buildActivityFeed, type ActivityTool } from './activityFeed';
+import { connectionErrorText } from '../../services/connectionRecovery';
 import { Ionicons } from '@expo/vector-icons';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import { actionDetails } from './actionDetails';
 import * as ImagePicker from 'expo-image-picker';
 import { Directory, File, Paths } from 'expo-file-system';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -29,16 +32,12 @@ import { appendDiagnosticEvent, getPreference, savePreference } from '../../data
 import { color, radius, space, type } from '../../design/tokens';
 import type { ChatAction, ChatAttachment, ChatMealQuestionMessage, ChatThread } from '../../domain/chat';
 import { mealQuestions, type Meal } from '../../domain/meal';
-import { formatTime, t } from '../../i18n';
+import { locale, formatTime, t } from '../../i18n';
 import { openChatSession, type ChatSession, type ChatSessionSnapshot } from '../../services/chatSession';
 import type { ProviderToolActivity } from '../../ai/providerActivity';
 import { userFacingToolActivity } from '../../ai/toolActivity';
 import { AssistantMarkdown } from './AssistantMarkdown';
 import { composerBottomSpace, keyboardAvoidingBehavior, keyboardAvoidingOffset, keyboardOccupiesWindow } from './composerPlacement';
-
-type FeedItem =
-  | { kind: 'message'; key: string; timestamp: number; message: AgentMessage }
-  | { kind: 'action'; key: string; timestamp: number; action: ChatAction };
 
 export function AssistantScreen(props: {
   thread: ChatThread;
@@ -158,7 +157,7 @@ export function AssistantScreen(props: {
     };
   }, [props.thread.id, props.selectedMeal?.id, sessionRevision]);
 
-  const feed = useMemo(() => buildFeed(snapshot), [snapshot]);
+  const feed = useMemo(() => buildActivityFeed(snapshot), [snapshot]);
   const toolResults = useMemo(() => {
     const results = new Map<string, Extract<AgentMessage, { role: 'toolResult' }>>();
     for (const message of snapshot.messages) {
@@ -166,9 +165,11 @@ export function AssistantScreen(props: {
     }
     return results;
   }, [snapshot.messages]);
+  // Pending calls belong only to the current user turn, never to older interrupted turns.
+  const currentTurnMessages = new Set(snapshot.messages.slice(snapshot.messages.findLastIndex((message) => message.role === 'chatUser' || message.role === 'user') + 1));
   const streamingHasText = snapshot.streamingMessage?.role === 'assistant' && snapshot.streamingMessage.content.some((block) => block.type === 'text' && block.text.length > 0);
-  const streamingHasActivity = snapshot.streamingMessage?.role === 'assistant' && snapshot.streamingMessage.content.some((block) => block.type === 'thinking' || block.type === 'toolCall');
-  const hasPendingTool = snapshot.messages.some((message) => message.role === 'assistant' && message.content.some((block) => block.type === 'toolCall' && !toolResults.has(block.id)));
+  const streamingHasActivity = snapshot.streamingMessage?.role === 'assistant' && snapshot.streamingMessage.content.some((block) => block.type === 'toolCall');
+  const hasPendingTool = snapshot.messages.some((message) => currentTurnMessages.has(message) && message.role === 'assistant' && message.content.some((block) => block.type === 'toolCall' && !toolResults.has(block.id)));
   const showWorking = snapshot.busy && !streamingHasText && !streamingHasActivity && !hasPendingTool && snapshot.providerActivities.length === 0;
   useEffect(() => {
     const timeout = setTimeout(() => scroll.current?.scrollToEnd({ animated: true }), 40);
@@ -177,7 +178,7 @@ export function AssistantScreen(props: {
 
   const send = async (suggestion?: string) => {
     const text = suggestion ?? draft;
-    if (!session || snapshot.busy || (!text.trim() && attachments.length === 0)) return;
+    if (!session || snapshot.busy || snapshot.mealActivity || (!text.trim() && attachments.length === 0)) return;
     const sentAttachments = attachments;
     setDraft('');
     setAttachments([]);
@@ -299,15 +300,25 @@ export function AssistantScreen(props: {
               <EmptyAssistant selectedMeal={Boolean(props.selectedMeal)} onSuggestion={(value) => void send(value)} />
             ) : (
               feed.map((item) => item.kind === 'message'
-                ? <MessageRow key={item.key} busy={snapshot.busy} message={item.message} toolResults={toolResults} />
+                ? <MessageRow key={item.key} message={item.message} />
+                : item.kind === 'activity' ? <ActivityGroup key={item.key} tools={item.tools} />
                 : <ActionRow key={item.key} action={item.action} busy={undoing === item.action.id} onUndo={() => void undo(item.action.id)} />)
             )}
-            {snapshot.streamingMessage && <MessageRow busy={snapshot.busy} message={snapshot.streamingMessage} toolResults={toolResults} />}
             {snapshot.providerActivities.map((activity) => <ProviderActivityRow key={activity.id} activity={activity} />)}
-            {showWorking && (
+            {snapshot.mealActivity && !snapshot.busy && <WorkingRow label={locale === 'ru' ? 'Уточняю приём пищи…' : 'Updating your meal…'} />}
+            {snapshot.recovering && <WorkingRow label={locale === 'ru' ? 'Восстанавливаю соединение…' : 'Reconnecting…'} />}
+            {showWorking && !snapshot.recovering && (
               <View style={styles.working}><ActivityIndicator color={color.action} size="small" /><Text style={styles.workingText}>{t('assistantWorking')}</Text></View>
             )}
-            {snapshot.error && <Text accessibilityRole="alert" style={styles.error}>{snapshot.error}</Text>}
+            {props.selectedMeal?.error && !snapshot.mealActivity && !snapshot.busy && !snapshot.error &&
+              <Text accessibilityRole="alert" style={styles.error}>{connectionErrorText(props.selectedMeal.error, locale)}</Text>}
+            {snapshot.error && !snapshot.busy && <View>
+              <Text accessibilityRole="alert" style={styles.error}>{connectionErrorText(snapshot.error, locale)}</Text>
+              <Pressable accessibilityRole="button" disabled={Boolean(snapshot.mealActivity)} onPress={() => void session?.retry().catch(() => undefined)} style={styles.stepsToggle}>
+                <Ionicons name="refresh-outline" size={18} color={color.action} />
+                <Text style={styles.stepsLabel}>{locale === 'ru' ? 'Повторить' : 'Retry'}</Text>
+              </Pressable>
+            </View>}
           </ScrollView>
 
           <View ref={composerRoot} style={[styles.composerDock, { paddingBottom: space.sm + composerBottomSpace(effectiveKeyboardVisible, props.bottomInset) }]}>
@@ -322,12 +333,12 @@ export function AssistantScreen(props: {
               </ScrollView>
             )}
             <View style={styles.composer}>
-              <Pressable accessibilityRole="button" accessibilityLabel={t('attachPhoto')} disabled={snapshot.busy || attachmentBusy} onPress={chooseAttachment} style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('attachPhoto')} disabled={snapshot.busy || Boolean(snapshot.mealActivity) || attachmentBusy} onPress={chooseAttachment} style={({ pressed }) => [styles.attachButton, pressed && styles.pressed]}>
                 {attachmentBusy ? <ActivityIndicator color={color.action} size="small" /> : <Ionicons name="add" size={24} color={color.action} />}
               </Pressable>
               <TextInput
                 accessibilityLabel={t('messageAssistant')}
-                editable={!snapshot.busy}
+                editable={!snapshot.busy && !snapshot.mealActivity}
                 multiline
                 onChangeText={setDraft}
                 onFocus={() => recordLayoutDiagnostic('input_focus', Keyboard.isVisible())}
@@ -337,7 +348,7 @@ export function AssistantScreen(props: {
                 style={styles.input}
                 value={draft}
               />
-              <Pressable accessibilityRole="button" accessibilityLabel={snapshot.busy ? t('stop') : t('send')} disabled={!snapshot.busy && !draft.trim() && attachments.length === 0} onPress={() => snapshot.busy ? session?.abort() : void send()} style={({ pressed }) => [styles.sendButton, !snapshot.busy && !draft.trim() && attachments.length === 0 && styles.disabled, pressed && styles.sendPressed]}>
+              <Pressable accessibilityRole="button" accessibilityLabel={snapshot.busy ? t('stop') : t('send')} disabled={Boolean(snapshot.mealActivity) && !snapshot.busy || !snapshot.busy && !draft.trim() && attachments.length === 0} onPress={() => snapshot.busy ? session?.abort() : void send()} style={({ pressed }) => [styles.sendButton, !snapshot.busy && !draft.trim() && attachments.length === 0 && styles.disabled, pressed && styles.sendPressed]}>
                 <Ionicons name={snapshot.busy ? 'stop' : 'arrow-up'} size={20} color={color.surface} />
               </Pressable>
             </View>
@@ -468,8 +479,6 @@ function EmptyAssistant(props: { selectedMeal: boolean; onSuggestion: (value: st
 
 function MessageRow(props: {
   message: AgentMessage;
-  busy: boolean;
-  toolResults: ReadonlyMap<string, Extract<AgentMessage, { role: 'toolResult' }>>;
 }) {
   if (props.message.role === 'toolResult' || props.message.role === 'user') return null;
   if (props.message.role === 'mealQuestion') {
@@ -478,7 +487,7 @@ function MessageRow(props: {
       <View style={styles.questionMessage}>
         <Text style={styles.questionMessageLabel}>{t('clarificationTitle')}</Text>
         {questionMessage.questions.map((question, index) => (
-          <Text key={`${question}-${index}`} style={styles.questionMessageText}>
+          <Text selectable key={`${question}-${index}`} style={styles.questionMessageText}>
             {questionMessage.questions.length > 1 ? `${index + 1}. ` : ''}{question}
           </Text>
         ))}
@@ -493,43 +502,45 @@ function MessageRow(props: {
             {props.message.attachments.map((photo) => <Image key={photo.id} source={{ uri: photo.uri }} style={styles.messagePhoto} />)}
           </ScrollView>
         )}
-        <View style={styles.userMessage}><Text style={styles.userText}>{props.message.text}</Text></View>
+        <View style={styles.userMessage}><Text selectable style={styles.userText}>{props.message.text}</Text></View>
       </View>
     );
   }
   if (props.message.role !== 'assistant') return null;
-  const hasVisibleContent = props.message.content.some((block) => block.type === 'toolCall' || (block.type === 'text' && Boolean(block.text)));
-  const isThinking = props.busy && props.message.content.some((block) => block.type === 'thinking');
-  if (!hasVisibleContent && !isThinking) return null;
-  return (
-    <View style={styles.assistantMessage}>
-      {props.message.content.map((block, index) => block.type === 'text'
-        ? (block.text ? <AssistantMarkdown key={`text-${index}`}>{block.text}</AssistantMarkdown> : null)
-        : block.type === 'toolCall'
-          ? <ToolActivityRow key={block.id} call={block} result={props.toolResults.get(block.id)} busy={props.busy} />
-          : null)}
-      {!hasVisibleContent && isThinking && <WorkingRow label={t('assistantWorking')} />}
-    </View>
-  );
+  return <View style={styles.assistantMessage}>{props.message.content.map((block, index) => block.type === 'text' && block.text ? <AssistantMarkdown key={index}>{block.text}</AssistantMarkdown> : null)}</View>;
 }
 
-function ToolActivityRow(props: {
-  call: Extract<Extract<AgentMessage, { role: 'assistant' }>['content'][number], { type: 'toolCall' }>;
-  result?: Extract<AgentMessage, { role: 'toolResult' }>;
-  busy: boolean;
-}) {
-  const active = !props.result && props.busy;
-  const failed = props.result?.isError;
-  return (
-    <View accessibilityLabel={toolActivityLabel(props.call.name, props.call.arguments)} style={styles.toolActivity}>
-      {active
-        ? <ActivityIndicator color={color.action} size="small" />
-        : <Ionicons name={failed ? 'alert-circle-outline' : 'checkmark'} size={16} color={failed ? color.error : color.muted} />}
-      <Text numberOfLines={2} style={[styles.toolActivityText, failed && styles.toolActivityError]}>
-        {toolActivityLabel(props.call.name, props.call.arguments)}
-      </Text>
-    </View>
-  );
+function ActivityGroup({ tools }: { tools: ActivityTool[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const active = tools.some(tool => tool.status === 'running' || tool.status === 'preparing');
+  const failed = tools.some(tool => tool.status === 'failed');
+  const cancelled = tools.some(tool => tool.status === 'cancelled');
+  if (tools.length === 1) return <ToolActivityRow tool={tools[0]} />;
+  const summary = active ? t('assistantWorking') : failed
+    ? (locale === 'ru' ? 'Есть невыполненные действия' : 'Some actions failed') : cancelled
+    ? (locale === 'ru' ? 'Действия прерваны' : 'Actions interrupted')
+    : (locale === 'ru' ? `Выполнено действий: ${tools.length}` : `${tools.length} actions completed`);
+  // While collapsed, active and failed rows stay visible; successful details
+  // collapse automatically at completion without hiding the separate undo receipts.
+  return <View style={styles.stepsGroup}>
+    <Pressable accessibilityRole="button" accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={styles.stepsToggle}>
+      <Ionicons name={failed ? 'alert-circle-outline' : active ? 'ellipsis-horizontal' : cancelled ? 'remove-circle-outline' : 'checkmark-circle-outline'} size={17} color={failed ? color.error : color.action} />
+      <Text style={styles.stepsLabel}>{summary}</Text>
+      <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={15} color={color.muted} />
+    </Pressable>
+    {tools.filter(tool => expanded || tool.status !== 'completed').map(tool => <ToolActivityRow key={tool.call.id} tool={tool} />)}
+  </View>;
+}
+
+function ToolActivityRow({ tool }: { tool: ActivityTool }) {
+  const active = tool.status === 'running' || tool.status === 'preparing';
+  const failed = tool.status === 'failed';
+  const label = tool.status === 'preparing' ? (locale === 'ru' ? 'Подготавливаю действие…' : 'Preparing action…') : toolActivityLabel(tool.call.name, tool.call.arguments);
+  const status = tool.status === 'cancelled' ? (locale === 'ru' ? 'Прервано' : 'Cancelled') : failed ? (locale === 'ru' ? 'Не выполнено' : 'Failed') : '';
+  return <View accessibilityLabel={`${label}${status ? `. ${status}` : ''}`} style={styles.toolActivity}>
+    {active ? <ActivityIndicator color={color.action} size="small" /> : <Ionicons name={failed ? 'alert-circle-outline' : tool.status === 'cancelled' ? 'remove-circle-outline' : 'checkmark'} size={16} color={failed ? color.error : color.muted} />}
+    <Text style={[styles.toolActivityText, failed && styles.toolActivityError]}>{label}{status ? ` · ${status}` : ''}</Text>
+  </View>;
 }
 
 function ProviderActivityRow(props: { activity: ProviderToolActivity }) {
@@ -577,27 +588,28 @@ function toolActivityLabel(name: string, args: Record<string, unknown>): string 
 }
 
 function ActionRow(props: { action: ChatAction; busy: boolean; onUndo: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const details = actionDetails(props.action, locale);
   return (
-    <View style={styles.actionRow}>
-      <Ionicons name={props.action.undone ? 'arrow-undo-outline' : 'checkmark'} size={17} color={props.action.undone ? color.muted : color.action} />
-      <Text style={[styles.actionLabel, props.action.undone && styles.actionUndone]}>{props.action.label}</Text>
-      {!props.action.undone && props.action.canUndo !== false && (
-        <Pressable accessibilityRole="button" disabled={props.busy} hitSlop={8} onPress={props.onUndo}>
-          <Text style={styles.undo}>{props.busy ? t('undoing') : t('undo')}</Text>
+    <View style={styles.actionReceipt}>
+      <View style={styles.actionRow}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`${props.action.label}. ${locale === 'ru' ? 'Что изменилось' : 'What changed'}`} accessibilityState={{ expanded }} onPress={() => setExpanded(!expanded)} style={styles.receiptToggle}>
+          <Ionicons name={props.action.undone ? 'arrow-undo-outline' : 'checkmark'} size={17} color={props.action.undone ? color.muted : color.action} />
+          <View style={{ flex: 1 }}><Text style={[styles.actionLabel, props.action.undone && styles.actionUndone]}>{props.action.label}</Text><Text style={styles.receiptHint}>{locale === 'ru' ? 'Что изменилось' : 'What changed'}{details.length > 0 ? ` · ${details.length}` : ''}</Text></View>
+          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={color.action} />
         </Pressable>
-      )}
+        {!props.action.undone && props.action.canUndo !== false && <Pressable accessibilityRole="button" accessibilityState={{ disabled: props.busy }} disabled={props.busy} onPress={props.onUndo} style={styles.receiptUndo}><Text style={styles.undo}>{props.busy ? t('undoing') : t('undo')}</Text></Pressable>}
+      </View>
+      {expanded && <View style={styles.receiptDetails}>
+        <Text style={styles.receiptHint}>{props.action.undone ? (locale === 'ru' ? 'Изменение отменено. Ниже — исходное действие.' : 'Undone. Original action shown below.') : (locale === 'ru' ? 'Было → Стало' : 'Before → After')}</Text>
+        {details.length === 0 ? <Text style={styles.receiptValue}>{locale === 'ru' ? 'Подробности изменения в этой записи не сохранены.' : 'Change details were not saved for this action.'}</Text> : details.map((detail) => <View key={detail.label} style={styles.receiptDetail}>
+          <Text style={styles.receiptField}>{detail.label}</Text>
+          <Text selectable style={styles.receiptBefore}>{detail.before ?? '—'}</Text>
+          <Text selectable style={styles.receiptValue}>→ {detail.after ?? '—'}</Text>
+        </View>)}
+      </View>}
     </View>
   );
-}
-
-function buildFeed(snapshot: ChatSessionSnapshot): FeedItem[] {
-  const messages = snapshot.messages.flatMap((message, index): FeedItem[] => {
-    if (message.role !== 'assistant' && message.role !== 'chatUser' && message.role !== 'mealQuestion') return [];
-    const timestamp = 'timestamp' in message ? message.timestamp : Date.now();
-    return [{ kind: 'message', key: `message-${index}-${timestamp}`, timestamp, message }];
-  });
-  const actions = snapshot.actions.map((action): FeedItem => ({ kind: 'action', key: `action-${action.id}`, timestamp: action.createdAt, action }));
-  return [...messages, ...actions].sort((left, right) => left.timestamp - right.timestamp);
 }
 
 function measureInWindow(view: { measureInWindow: (callback: (x: number, y: number, width: number, height: number) => void) => void } | null): Promise<{ x: number; y: number; width: number; height: number } | undefined> {
@@ -617,26 +629,36 @@ async function storeAttachment(asset: ImagePicker.ImagePickerAsset): Promise<Cha
 }
 
 const styles = StyleSheet.create({
+  actionReceipt: { backgroundColor: color.actionSoft, borderRadius: 14, overflow: 'hidden' },
+  receiptToggle: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48 },
+  receiptUndo: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 6 },
+  receiptHint: { color: color.muted, fontSize: 12, lineHeight: 18, marginTop: 4 },
+  receiptDetails: { padding: 16, paddingTop: 0 }, receiptDetail: { marginTop: 14, gap: 4 },
+  receiptField: { color: color.ink, fontFamily: type.ticket, fontSize: 13 }, receiptBefore: { color: color.muted, fontSize: 14, lineHeight: 20 }, receiptValue: { color: color.ink, fontSize: 14, lineHeight: 20 },
+
+  stepsGroup: { marginTop: 6 },
+  stepsToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48 },
+  stepsLabel: { color: color.muted, fontSize: 12, flex: 1 },
   safeArea: { backgroundColor: color.canvas, flex: 1 },
   screen: { flex: 1 },
   header: { alignItems: 'center', flexDirection: 'row', height: 60, justifyContent: 'space-between', paddingHorizontal: space.sm },
   historyHeader: { alignItems: 'center', flexDirection: 'row', height: 60, justifyContent: 'space-between', paddingHorizontal: space.sm },
-  headerTitle: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 25, textAlign: 'center' },
+  headerTitle: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 21, textAlign: 'center' },
   mealContext: { alignItems: 'center', borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', marginHorizontal: space.md, minHeight: 58, paddingBottom: space.sm },
   mealContextPhoto: { borderRadius: radius.image, height: 42, width: 42 },
   mealContextCopy: { flex: 1, marginLeft: space.sm, minWidth: 0 },
   mealContextLabel: { color: color.muted, fontFamily: type.ticket, fontSize: 11, letterSpacing: 0.5 },
   mealContextTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 17, marginTop: 2 },
   feedScroll: { flex: 1 },
-  feed: { flexGrow: 1, gap: space.md, paddingBottom: space.md, paddingHorizontal: space.md, paddingTop: space.sm },
-  empty: { flex: 1, justifyContent: 'center', minHeight: 420, paddingHorizontal: space.sm },
-  emptyMark: { alignItems: 'center', borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, height: 52, justifyContent: 'center', width: 52 },
-  emptyTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 28, lineHeight: 31, marginTop: space.md },
+  feed: { flexGrow: 1, gap: 18, paddingBottom: space.md, paddingHorizontal: 20, paddingTop: 16 },
+  empty: { flex: 1, justifyContent: 'center', minHeight: 240, paddingHorizontal: space.sm },
+  emptyMark: { alignItems: 'center', backgroundColor: color.actionSoft, borderRadius: 18, height: 52, justifyContent: 'center', width: 52 },
+  emptyTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 25, lineHeight: 31, marginTop: space.md },
   suggestions: { borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: space.lg },
   suggestion: { alignItems: 'center', borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', minHeight: 56, paddingHorizontal: space.xs },
   suggestionText: { color: color.ink, flex: 1, fontSize: 15, lineHeight: 21, marginRight: space.md },
   userWrap: { alignItems: 'flex-end' },
-  userMessage: { backgroundColor: color.surfacePressed, borderRadius: radius.surface, maxWidth: '86%', paddingHorizontal: 14, paddingVertical: 11 },
+  userMessage: { backgroundColor: color.actionSoft, borderRadius: radius.surface, maxWidth: '86%', paddingHorizontal: 14, paddingVertical: 11 },
   userText: { color: color.ink, fontSize: 15, lineHeight: 21 },
   messagePhotos: { gap: space.sm, marginBottom: space.sm },
   messagePhoto: { borderRadius: radius.image, height: 104, width: 104 },
@@ -650,7 +672,7 @@ const styles = StyleSheet.create({
   toolActivityText: { color: color.muted, flexShrink: 1, fontSize: 13 },
   toolActivityError: { color: color.error },
   error: { color: color.error, fontSize: 13, lineHeight: 18 },
-  actionRow: { alignItems: 'flex-start', flexDirection: 'row', minHeight: 34, paddingHorizontal: 2, paddingVertical: 7 },
+  actionRow: { backgroundColor: color.actionSoft, borderRadius: 12, alignItems: 'center', flexDirection: 'row', minHeight: 48, paddingHorizontal: 12, paddingVertical: 10 },
   actionLabel: { color: color.ink, flex: 1, fontSize: 13, lineHeight: 18, marginHorizontal: space.sm },
   actionUndone: { color: color.muted },
   undo: { color: color.action, fontFamily: type.ticketBold, fontSize: 13, lineHeight: 18 },
@@ -670,7 +692,7 @@ const styles = StyleSheet.create({
   threadOpen: { alignItems: 'center', flex: 1, flexDirection: 'row', minHeight: 62, paddingHorizontal: space.xs },
   threadPressed: { backgroundColor: color.surfacePressed },
   threadCopy: { flex: 1, minWidth: 0 },
-  threadTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 19 },
+  threadTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 16 },
   threadTime: { color: color.muted, fontSize: 12, marginTop: 4 },
   instructionsBackdrop: { backgroundColor: 'rgba(30, 33, 38, 0.58)', flex: 1, justifyContent: 'flex-end' },
   instructionsSafeArea: { padding: space.md },

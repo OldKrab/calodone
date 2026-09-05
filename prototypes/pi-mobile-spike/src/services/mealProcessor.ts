@@ -165,7 +165,7 @@ export async function processPendingMeals(): Promise<void> {
   for (const meal of meals) await processMeal(meal.id);
 }
 
-export async function answerMealClarification(id: string, answer: string, answeredInThreadId?: string): Promise<void> {
+export async function answerMealClarification(id: string, answer: string, answeredInThreadId?: string, signal?: AbortSignal): Promise<void> {
   const meal = await getMeal(id);
   const clarification = meal?.analysis?.clarification;
   if (!meal?.analysis || !clarification) return;
@@ -178,8 +178,17 @@ export async function answerMealClarification(id: string, answer: string, answer
   await setMealStatus(id, 'analyzing');
   try {
     setMealActivity(id, 'reviewing_meal');
+    // Clarification is a fresh provider request: the prior analysis does not
+    // carry image bytes forward. Reload the saved meal's visual evidence.
+    const photos = await Promise.all(meal.photos.map(async (photo) => ({
+      base64: await new File(photo.uri).base64(),
+      mimeType: photo.mimeType,
+    })));
     const result = await refineMealAnalysis({
       mealId: id,
+      signal,
+      photos,
+      note: meal.note,
       previousJson: JSON.stringify(meal.analysis),
       question: questions.join('\n'),
       answer,

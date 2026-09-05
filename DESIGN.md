@@ -1,235 +1,131 @@
 ---
 name: CaloDone
-description: A calm meal-check system for photo-first nutrition tracking.
+description: Native Android meal journal.
 colors:
-  blueberry-action: "#59677D"
-  blueberry-pressed: "#465267"
-  oat-paper: "#F3F0EA"
-  ticket-paper: "#FCFAF5"
-  carbon-ink: "#292B30"
-  quiet-ink: "#6D6F75"
-  steel-line: "#CDC9C1"
-  day-rail: "#454A56"
-  rail-copy: "#E0DDE0"
-  success: "#5F7668"
-  attention: "#8A6B40"
-  error: "#925A58"
+  canvas: "#F5F8F6"
+  surface: "#FFFFFF"
+  surfacePressed: "#E7F0EA"
+  ink: "#172E26"
+  muted: "#596A62"
+  line: "#DCE5DF"
+  action: "#176B4D"
+  actionPressed: "#105339"
+  actionSoft: "#E2F0E7"
+  pending: "#866019"
+  attentionSoft: "#FAF1DB"
+  error: "#A33D39"
+  errorSoft: "#FBEAE7"
+  camera: "#101B17"
+  cameraChrome: "rgba(16, 27, 23, 0.86)"
+  cameraInput: "#26382E"
+  cameraLine: "#647C6D"
+  cameraMuted: "#CAD8CF"
 typography:
   display:
-    fontFamily: "Barlow Condensed, Arial Narrow, sans-serif"
-    fontSize: "2rem"
-    fontWeight: 700
-    lineHeight: 1
-  title:
-    fontFamily: "Barlow Condensed, Arial Narrow, sans-serif"
-    fontSize: "1.45rem"
-    fontWeight: 700
-    lineHeight: 1.1
+    fontFamily: "sans-serif-medium"
+    fontSize: "32sp"
+  headline:
+    fontFamily: "sans-serif-medium"
+    fontSize: "25sp"
+    lineHeight: "31sp"
   body:
-    fontFamily: "Roboto, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "0.9375rem"
-    fontWeight: 400
-    lineHeight: 1.45
+    fontSize: "15sp"
+    lineHeight: "21sp"
   label:
-    fontFamily: "Barlow Condensed, Arial Narrow, sans-serif"
-    fontSize: "0.8125rem"
-    fontWeight: 600
-    lineHeight: 1.1
-    letterSpacing: "0.05em"
+    fontSize: "12sp"
 rounded:
-  sm: "4px"
-  control: "8px"
-  surface: "10px"
+  sm: "6dp"
+  control: "14dp"
+  surface: "18dp"
+  image: "14dp"
+  round: "999dp"
 spacing:
-  xs: "4px"
-  sm: "8px"
-  md: "16px"
-  lg: "24px"
-  xl: "32px"
+  xs: "4dp"
+  sm: "8dp"
+  md: "16dp"
+  lg: "24dp"
+  xl: "32dp"
+  xxl: "48dp"
 components:
   button-primary:
-    backgroundColor: "{colors.blueberry-action}"
-    textColor: "{colors.ticket-paper}"
-    typography: "{typography.title}"
+    backgroundColor: "{colors.action}"
+    textColor: "{colors.surface}"
     rounded: "{rounded.control}"
-    height: "56px"
-  ticket:
-    backgroundColor: "{colors.ticket-paper}"
-    textColor: "{colors.carbon-ink}"
-    rounded: "{rounded.surface}"
-    padding: "16px"
+    padding: "14dp 24dp"
+  button-primary-pressed:
+    backgroundColor: "{colors.actionPressed}"
+    textColor: "{colors.surface}"
+    rounded: "{rounded.control}"
   input:
-    backgroundColor: "{colors.oat-paper}"
-    textColor: "{colors.carbon-ink}"
+    backgroundColor: "{colors.surface}"
+    textColor: "{colors.ink}"
     rounded: "{rounded.control}"
-    height: "50px"
 ---
 
 # Design System: CaloDone
 
 ## Overview
 
-**Creative North Star: "The Quiet Kitchen Pass"**
+**Creative North Star: "Kitchen Scale Instrument"**
 
-CaloDone treats each meal as a check moving from captured to reviewed to complete. Its kitchen-pass lineage comes from information order, condensed ticket typography, perforated separators, and explicit states rather than theatrical restaurant decoration.
+A precise everyday instrument with the clarity of a daily journal: compact nutrition readings, readable meal rows, and a dedicated photo action. Mineral white, deep green ink, emerald actions, and soft sage selections provide a shared visual language across logging, editing, setup, settings, and Assistant.
 
-The system is calm, workmanlike, and compact. Warm oat-paper grounds and muted blueberry actions sit comfortably beside meal photography while keeping one-handed tasks clear. The product refuses generic dashboard chrome, ambient AI effects, and decorative precision that makes estimates appear more certain than they are.
+This document describes the native Android implementation in `prototypes/pi-mobile-spike`. The user approved the experiment's design for the original CaloDone app: version 1.1.0 (version code 5), package `dev.calodone.pimobilespike`, scheme `calodone`. It supersedes the former kitchen-ticket visual system. It does not describe a website redesign. `PRODUCT.md` owns product behavior and domain truth.
 
-**Key Characteristics:**
+Source of truth: `src/design/tokens.ts`, `App.tsx`, shared components, and feature screens within that prototype. The frontmatter records native values: layout dimensions are dp, text sizes are sp, represented by React Native numeric styles. These are not CSS requirements. Typography entries describe observed roles, not a centralized complete type scale.
 
-- One unresolved task may lead Today; totals and history remain visually quiet.
-- Ticket structure makes capture, processing, and review states legible.
-- Muted blueberry is functional and rare; carbon ink carries hierarchy.
-- Motion acknowledges state changes and then gets out of the way.
+Evidence is source-based. Typecheck and the release regression suite passed; an independent limited source review confirmed the reviewed fixes resolved. Native screenshots and device visual validation remain unavailable because the isolated software emulator's launcher/SystemUI encountered ANRs. Dark theme, large-font rendering, expanded-screen layout, and gesture behavior have not been visually validated. The implemented palette is static and light; do not infer Dynamic Color or complete Material 3 compliance.
 
 ## Colors
 
-The palette is a cool, low-saturation kitchen workspace with one restrained functional accent.
+Emerald `action` marks primary actions, selections, and success. `actionPressed` provides the pressed state; `actionSoft` provides sage budget and selected surfaces. Primary text uses `ink`; `muted` supports metadata without competing with results. `canvas`, white `surface`, and fine `line` separators establish ordinary structure.
 
-### Primary
-
-- **Muted Blueberry:** The sole interactive accent for primary actions and selected states. It stays neutral beside warm and cool food photography without reading as medical UI.
-
-### Neutral
-
-- **Oat Paper:** The app field and quiet input ground.
-- **Ticket Paper:** Raised working surfaces and meal checks.
-- **Carbon Ink:** Primary text and numeric hierarchy.
-- **Quiet Ink:** Secondary copy, metadata, and placeholders.
-- **Soft Steel:** Dividers, perforations, and container edges.
-- **Day Rail:** Day navigation and camera-adjacent structure.
-
-### Named Rules
-
-**The One Accent Rule.** Blueberry marks actions and selected states; it does not become decoration or fill large portions of a screen. Success green, attention amber, and error cranberry appear only as semantic state colors.
-
-**The Honest State Rule.** Attention and error colors appear only when the user has a real decision or recovery action.
+Amber `pending` and `attentionSoft` identify unresolved work. Red `error` and `errorSoft` identify failures and destructive actions. Status must also have readable text or an icon. Camera surfaces use their own dark background, translucent chrome, input, line, and muted-text roles; white supplies camera foreground text.
 
 ## Typography
 
-**Display Font:** Barlow Condensed (with Arial Narrow fallback)
+Android hierarchy uses the native `sans-serif-medium` face, including Cyrillic; ordinary body text uses the system default. The legacy token names `ticket` and `ticketBold` both resolve to this platform face, not a condensed ticket font. No new font assets are required.
 
-**Body Font:** Roboto (with the platform sans-serif fallback)
-
-**Character:** Condensed headings recall printed kitchen checks and make dense meal names scannable. The body face stays neutral and highly legible for questions, notes, and nutrition detail.
-
-### Hierarchy
-
-- **Display:** Bold condensed type for day names, meal titles, and primary totals.
-- **Title:** Bold condensed type for section names, ticket headings, and buttons.
-- **Body:** Platform-friendly sans-serif for instructions, questions, and editable values.
-- **Label:** Semi-bold condensed type with restrained tracking for statuses and metadata.
-
-### Named Rules
-
-**The Ticket Voice Rule.** Use condensed type for hierarchy and operational labels, never for long explanatory paragraphs.
+Today uses a 27sp date heading, 32sp energy reading, 16sp macro values and meal names, and 12sp metadata. Meal detail uses a 25sp title with 31sp line height, a 23sp calorie result, and body copy commonly at 15sp with 21sp line height. Shared primary buttons use 16sp text. Preserve native font scaling; font-scale rendering still needs device verification.
 
 ## Layout
 
-Android phones are the primary canvas. Screens use a 16px outer inset, 8-16px internal gaps, and 24px separation between lifecycle stages. Today follows a strict state ladder: one expanded question or failure requiring action, any additional required items as compact rows, active analysis, the one-line daily summary, completed meals newest first, then the fixed blank capture ticket. Section titles, counts, ingredients, and routine estimate labels stay off this overview.
+Compact Android phones are the implemented target. Today has a 16dp header inset and 20dp content inset. Its date controls lead a compact sage energy budget and three macro readings, followed by attention states and a journal of meals. The camera action occupies its own footer above primary navigation, separate from the scrolling journal. Avoid returning to a large floating ticket that obscures rows.
 
-Capture stays in one camera session. The first shot reveals a tray for removal and an optional note, followed by a primary Use photo action and a secondary Add another angle action. On wider web-preview canvases the phone surface caps at 430px; native Android remains full width and respects system insets.
+Meal detail leads with title, calorie result, and macros. Supporting photos use a compact 138dp-high gallery; ingredients and notes follow. Editing uses expandable ingredient sections and a dedicated save dock, keeping the selected ingredient's fields together. Shared spacing uses the documented scale; local 10–20dp values support compact screen composition.
+
+The app shell owns bottom navigation and inset handling. Editable surfaces use the keyboard-aware layout helpers. Preserve system Back and reachable actions above the IME. Do not treat the phone layout as validated for tablets.
 
 ## Elevation & Depth
 
-The system is flat by default. Borders, tonal shifts, and overlap establish hierarchy; only the persistent capture ticket receives a low ambient lift so it remains findable above scrolling content.
+Ordinary content is flat: tonal surfaces and hairline separators carry hierarchy. Shared primary buttons have zero shadow opacity and zero elevation. Overlays alone carry lift: `AnchoredMenu` uses native elevation 7 and `AppDialog` elevation 8. Their React Native shadow definitions remain in the components; there is no browser box-shadow contract.
 
-**The Flat Work Surface Rule.** A card does not earn a shadow merely because it is a card. Use elevation only for persistent or physically overlapping controls.
-
-## Motion
-
-Motion explains navigation rather than decorating it. Forward routes enter with an 18px right-to-left settle over 240ms; back routes use a slightly shorter 14px return over 210ms. Same-level changes use a restrained 180ms fade. Photo selection and newly revealed controls use the same short easing family, with no bounce, blur, parallax, or staggered page choreography. Reduced-motion mode replaces spatial movement with a brief opacity acknowledgment and stops looping analysis pulses.
+Screen reveal uses a short opacity transition with an 8dp vertical settle, 220ms duration, and cubic ease-out; reduced motion skips this animation. Shared motion tokens also include a 140ms quick duration. Do not invent a new motion vocabulary per screen.
 
 ## Shapes
 
-Containers use gently clipped 10px corners, controls use 8px corners, and small stamps use 4px corners. Thin solid edges define structure; dashed rules indicate ticket perforation, provisional capture, or a field awaiting completion. Pills are reserved for true toggles rather than general-purpose labels.
+Shared controls and images use 14dp corners; working surfaces use 18dp; small details use 6dp. Circular controls use the round token. Today's budget has a deliberate local 22dp radius. Flat meal rows use compact 68×76dp photos with 14dp corners. Borders are solid and restrained; the old perforated kitchen-check motif is no longer the organizing system.
 
 ## Components
 
-### Buttons
-
-- **Shape:** Compact rectangular controls with 8px corners and at least a 48px touch target.
-- **Primary:** Muted blueberry with ticket-paper text; the main capture completion action may invert to ticket paper on the dark camera tray.
-- **Hover / Focus:** Darken the blueberry on hover or press; web focus uses a clear blueberry outline and native controls expose selected and disabled states.
-- **Secondary:** Ticket-paper or transparent controls with a steel edge and carbon text.
-
-### Cards / Containers
-
-- **Corner Style:** Gently clipped ticket corners (10px).
-- **Background:** Ticket paper on cool paper.
-- **Shadow Strategy:** Flat at rest; border-led separation.
-- **Border:** Soft steel, with dashed internal perforations where lifecycle groups divide.
-- **Internal Padding:** 14-16px on phones.
-
-### Inputs / Fields
-
-- **Style:** Cool-paper fill, 8px corners, carbon text, and a 48-50px minimum height.
-- **Focus:** Visible blueberry outline or platform focus treatment.
-- **Error / Disabled:** Error copy is muted red; disabled controls retain their shape and reduce opacity.
-
-### Dialogs / Action Sheets
-
-Three-dot/header overflow actions use a compact menu anchored directly below the trigger, without dimming the screen. Confirmations, notices, errors, and unanchored bottom actions use the CaloDone dialog surface: ticket paper, compact rows, one clear hierarchy, and a dimmed carbon backdrop. Never use `Alert.alert` or stock Android action dialogs. OS-owned permission, authentication, camera, photo-picker, and share UI remains native.
-
-### Navigation
-
-Day navigation is one clean row rather than a dashboard header. Previous day, centered date, next day, and settings use outlined icons with 48px targets. The bowl-and-check identity mark belongs to the launcher; it is not repeated in the Today header.
-
-### Meal Check
-
-A meal check owns the meal title, time, estimate, ingredients, capture note, and operational state. Today shows a thumbnail only when a saved photo exists; a photo-less meal remains a clean text row rather than receiving a fake placeholder. Detail shows every saved photo in a compact gallery, opens each photo full-screen, and preserves the user's capture note as quiet record content. Processing meals use a lightly defined working surface, softened thumbnail, restrained pulse, and an Analyzing label in place of calories; they never display a false zero result, AI glow, or invented progress percentage. Correction is a collapsed secondary action at the bottom of meal detail.
-
-### First-Open Setup
-
-First open is a five-step setup, not a product tour: goal, body inputs used by the estimate, activity, editable calorie and macro targets, and AI provider. The target is explicitly presented as an editable estimate rather than medical advice. Setup completion is persisted; goals and provider remain changeable in Settings.
-
-### Provider Selection
-
-Provider rows use the radio/check control itself to communicate selection. Do not repeat changing phrases such as “Selected” and “Use this provider” underneath every name. Adding and switching providers remain separate actions.
-
-### Assistant
-
-Assistant is a primary destination beside Today, not a modal utility. Its empty state asks one quiet question and offers at most two concrete starting prompts. Assistant replies sit directly on the canvas; user messages use a restrained paper fill so the conversation does not become a stack of competing cards. The composer stays above primary navigation and accepts text, camera photos, and existing images.
-
-Meal detail may open Assistant with that meal as visible, removable context. Conversations are local, persistent, and selectable from a simple history list. When Assistant changes a meal or daily goal, show a compact action receipt with Undo; ordinary discussion never looks like an action. Streaming uses a small working indicator and an explicit Stop control, without animated AI decoration.
-
-An unresolved meal clarification appears immediately on the open meal detail and can be answered inline. It also owns one persistent primary clarification conversation, created when the question appears. Opening “Discuss in Assistant” reuses that conversation and shows the question above the feed; “New chat” may create additional conversations linked to the same meal. Meal-to-chat is therefore one-to-many, never a permanent one-to-one lock.
-
-Every real Assistant tool call remains visible in sequence as a quiet operational row, including meal lookup, photo inspection, goal access, mutations, and web search when the provider exposes that call. An active call uses a spinner; completion uses a subdued check; failure uses the error color. Labels describe the operation, never raw arguments or private model reasoning. Thinking is a transient generic status only.
-
-Assistant prose renders a restrained Markdown subset—headings, emphasis, lists, quotes, code, and safe web links—using native text surfaces. “Thinking” is transient interface status only: it never becomes a message and disappears as soon as a reply or tool call begins. Each conversation has one active session owner so screen changes cannot let an older snapshot replace newer history.
-
-The Assistant header keeps one quiet overflow action. It groups New chat with Model settings, giving frequent model switching a short path without adding another permanent icon to the conversation surface.
-
-### Contextual Meal Actions
-
-A normal tap opens a meal. A long press opens the compact secondary menu: Ask Assistant, Reanalyze meal, and Delete. Reanalysis reuses the meal's saved photos and keeps the meal in its existing place while the processing state is visible. Destructive deletion still requires confirmation.
-
-### Goals
-
-Daily Goals keeps direct calorie and macro editing as the primary path. The rarer “Recalculate from your profile” action lives inside that page and reuses the first-open goal, measurements, activity, and target review steps without repeating provider setup.
-
-### Capture Session
-
-The camera remains open after every shot. After capture, the upper surface shows the selected photo—not the live-camera placeholder—and the scrollable thumbnail strip changes that preview. A compact Add photo tile lives inside that strip, an optional note follows, and a trash icon on the preview removes the selected photo. Analyze meal is the single bottom action and queues work in the background. Choosing Add photo returns to the same full viewfinder and shutter used for the first photo, then returns to review after capture. The design does not invent a visible photo-count cap; any production upload constraint must come from measured provider or storage limits.
-
-Before the first photo, the quiet action opposite the gallery opens a manual meal draft in the standard editor. The draft is not persisted until Save, so backing out cannot leave an empty meal in history. All editable screens resize for the Android IME and keep the focused field plus its action reachable above the keyboard.
+- **Primary button:** Emerald fill, white text, 54dp minimum height, 14dp vertical and 24dp horizontal padding. Press darkens the fill and translates it 1dp; busy/disabled states block activation and reduce opacity to 0.45. Busy replaces content with a spinner.
+- **Brand artwork:** `assets/calodone-fork-icon.png` is the user-selected white bent-fork/check silhouette on an emerald square, shared by the launcher, welcome brand row, About, and favicon. The selected 1254×1254 PNG is opaque RGB; exact prompts and provenance are in the sibling `.md` file. The Android launcher plugin applies 12% foreground insets for adaptive masks. No monochrome icon is configured. Asset inspection does not substitute for launcher-mask validation on a device.
+- **Icon button:** 48×48dp circular frame, 23dp icon, accessible label and selected/disabled state. Press reduces opacity and scale. Camera variants use translucent dark chrome.
+- **Fields:** Meal editor fields use white fill, a thin line border, 14dp corners, 15sp text, and 50dp minimum height. Ingredient accordions expose details on demand; the save dock remains distinct from ingredient deletion. Manual creation uses creation-specific header and action copy, without presenting an unsaved draft as an existing meal.
+- **Journal rows:** Meal name, meal type and time, calorie result or processing status, and compact imagery. Completed analyses also show a quiet protein/carbohydrate/fat line with localized abbreviations and units. Attention remains legible without replacing the daily budget or consuming the whole journal. A processing state must not impersonate a completed calorie estimate.
+- **Capture review:** Dark camera workspace, selected photo preview, a thumbnail strip with Add photo, optional note, and one primary Analyze meal action.
+- **Navigation:** A white bottom surface with a fine top divider, icon and 12sp label destinations, and a sage selected indicator. Selection and press feedback stay inside the same small 58×30dp icon pill; the whole destination does not acquire a competing pressed background. Capture has its own footer above it.
+- **Welcome, setup, settings, providers:** First open has a dedicated welcome surface with the brand, a short introduction, three photo/breakdown/correction steps, and one start action. Redesigned setup stages carry a clear step hierarchy and shared green choices/actions. Settings retain native typography and quiet rows. Provider selection uses its control to communicate state without repetitive selection copy.
+- **Assistant:** Restrained conversation, readable prose, quiet operational states and a reachable composer. Messages and clarification questions use native long-press text selection; no persistent Copy buttons. Inline meal analysis is visible in chat and refreshes its questions on completion. Transient connection failures retry once after foreground recovery; persistent failures offer an explicit retry. One tool call stays a direct operational row; consecutive calls across internal messages share a stable collapsible group. User messages and assistant prose break groups to preserve chronology. Labels stay generic until execution starts; execution events supply running, completed, failed, and cancelled states. Active and failed rows remain visible when completed details collapse. Action receipts expose before/after snapshots through “What changed” and keep Undo separate; missing historical detail is stated explicitly. Avoid AI decoration, fake progress, or visual claims of nutrition certainty.
+- **Menus and dialogs:** Use `AnchoredMenu` beside overflow triggers without a dimmed backdrop. Use `AppDialog` for app-owned confirmations, notices, errors, and unanchored actions. OS-owned permission, authentication, camera, photo-picker, and share interfaces may remain native.
 
 ## Do's and Don'ts
 
-### Do:
-
-- **Do** order screens around the user's next decision before showing summary data.
-- **Do** keep direct value editing visible while placing rare natural-language correction at the bottom of meal detail.
-- **Do** preserve 48px touch targets, visible focus, reduced-motion behavior, and readable contrast.
-- **Do** use the bowl-and-check mark as a compact identity asset, not as content illustration.
-
-### Don't:
-
-- **Don't** recreate a generic macro dashboard or make totals the primary task.
-- **Don't** send users through a full review screen after every photo.
-- **Don't** make another angle more prominent than accepting the photo already taken.
-- **Don't** split conversational correction and direct editing into disconnected flows.
-- **Don't** use glows, gradients, sparkles, fake progress, or unsupported nutrition accuracy claims.
-- **Don't** turn every status into a badge or every group into another floating card.
-- **Don't** use stock Android dialogs for app-owned actions, confirmations, notices, or errors.
+- **Do** keep the journal compact and put the meal result before supporting detail.
+- **Do** reuse semantic tokens and Cyrillic-capable native typography.
+- **Do** preserve Android touch-target, inset, keyboard, Back, and reduced-motion behavior, and verify them on a working native runtime.
+- **Do** show state with words or icons as well as color.
+- **Don't** reintroduce condensed kitchen-ticket fonts, perforation motifs, or large overlapping capture panels.
+- **Don't** turn every row into a floating card or every state into a prominent badge.
+- **Don't** use `Alert.alert` or stock platform dialogs for app-owned interactions.
+- **Don't** claim screenshot approval, dark-theme support, or device validation from source checks.

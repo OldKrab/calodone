@@ -1,36 +1,43 @@
+import { Easing, Platform } from 'react-native';
+
+/** Semantic roles shared by every surface in the experimental Android app. */
 export const color = {
-  canvas: '#F3F0EA',
-  surface: '#FCFAF5',
-  surfacePressed: '#E9E6E0',
-  ink: '#292B30',
-  muted: '#6D6F75',
-  line: '#CDC9C1',
-  rail: '#454A56',
-  railMuted: '#E0DDE0',
-  steel: '#9A9BA0',
-  action: '#59677D',
-  actionPressed: '#465267',
-  success: '#5F7668',
-  pending: '#8A6B40',
-  error: '#925A58',
-  camera: '#1E2126',
-  cameraChrome: 'rgba(30, 33, 38, 0.82)',
-  cameraInput: '#2B2F36',
-  cameraLine: '#858A94',
-  cameraMuted: '#C0C2C8',
-  cameraText: '#FCFAF5',
+  canvas: '#F5F8F6',
+  surface: '#FFFFFF',
+  surfacePressed: '#E7F0EA',
+  ink: '#172E26',
+  muted: '#596A62',
+  line: '#DCE5DF',
+  rail: '#172E26',
+  railMuted: '#DCE9DF',
+  steel: '#82938A',
+  action: '#176B4D',
+  actionPressed: '#105339',
+  actionSoft: '#E2F0E7',
+  success: '#176B4D',
+  pending: '#866019',
+  attentionSoft: '#FAF1DB',
+  error: '#A33D39',
+  errorSoft: '#FBEAE7',
+  camera: '#101B17',
+  cameraChrome: 'rgba(16, 27, 23, 0.86)',
+  cameraInput: '#26382E',
+  cameraLine: '#647C6D',
+  cameraMuted: '#CAD8CF',
+  cameraText: '#FFFFFF',
 } as const;
 
 export const space = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 } as const;
-export const radius = { sm: 4, control: 8, surface: 10, image: 6, round: 999 } as const;
+export const radius = { sm: 6, control: 14, surface: 18, image: 14, round: 999 } as const;
+// Platform faces include Cyrillic: headings and numeric values must not silently
+// fall back to a wider font when a user switches language.
 export const type = {
-  ticket: 'BarlowCondensed_600SemiBold',
-  ticketBold: 'BarlowCondensed_700Bold',
+  ticket: Platform.OS === 'android' ? 'sans-serif-medium' : 'System',
+  ticketBold: Platform.OS === 'android' ? 'sans-serif-medium' : 'System',
 } as const;
 export const motion = {
   quick: 140,
-  standard: 240,
-  screen: 280,
+  standard: 220,
+  screen: 220,
   easeOut: Easing.out(Easing.cubic),
 } as const;
-import { Easing } from 'react-native';

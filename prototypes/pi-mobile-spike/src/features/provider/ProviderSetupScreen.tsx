@@ -35,7 +35,7 @@ import { IconButton, PrimaryButton } from '../../components/controls';
 import { KeyboardSafeArea } from '../../components/KeyboardSafeArea';
 import { ScreenReveal } from '../../components/ScreenReveal';
 import { color, radius, space, type } from '../../design/tokens';
-import { t } from '../../i18n';
+import { locale, t } from '../../i18n';
 
 type PendingPrompt = {
   prompt: AuthPrompt;
@@ -66,6 +66,7 @@ export function ProviderSetupScreen(props: {
   const [selectedModelId, setSelectedModelId] = useState<string>();
   const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>();
   const [webSearch, setWebSearch] = useState(false);
+  const [advanced, setAdvanced] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
   const [thinkingPickerOpen, setThinkingPickerOpen] = useState(false);
@@ -208,7 +209,8 @@ export function ProviderSetupScreen(props: {
                 ))}
               </View>
 
-              {selectedProvider && (
+              {selectedProvider && <Pressable accessibilityRole="button" accessibilityState={{ expanded: advanced }} onPress={() => setAdvanced(!advanced)} style={styles.advancedButton}><View style={{ flex: 1 }}><Text style={styles.configurationLabel}>{locale === 'ru' ? 'Параметры анализа' : 'Analysis settings'}</Text><Text style={styles.configurationValue}>{selectedModel?.name ?? t('automatic')}</Text></View><Ionicons name={advanced ? 'chevron-up' : 'chevron-down'} size={20} color={color.action} /></Pressable>}
+              {selectedProvider && advanced && (
                 <View style={styles.configuration}>
                   <Pressable
                     accessibilityRole="button"
@@ -320,7 +322,7 @@ function ThinkingPicker(props: { levels: ThinkingLevel[]; selected?: ThinkingLev
       <SafeAreaView style={styles.modalBackdrop}>
         <View style={styles.modelPicker}>
           <View style={styles.modelPickerHeader}><Text style={styles.promptTitle}>{t('chooseThinkingLevel')}</Text><IconButton icon="close" label={t('close')} onPress={props.onClose} /></View>
-          <ScrollView contentContainerStyle={styles.modelList}>
+          <ScrollView contentContainerStyle={styles.modelList} keyboardShouldPersistTaps="handled">
             <ModelRow label={t('thinkingAutomatic')} selected={!props.selected} onPress={() => void props.onSelect()} />
             {props.levels.map((level) => <ModelRow key={level} label={thinkingLabel(level)} selected={props.selected === level} onPress={() => void props.onSelect(level)} />)}
           </ScrollView>
@@ -335,20 +337,24 @@ function ProviderRow(props: { provider: ProviderOption; selected: boolean; onPre
     <Pressable accessibilityRole="radio" accessibilityState={{ checked: props.selected }} onPress={props.onPress} style={({ pressed }) => [styles.providerRow, props.selected && styles.providerSelected, pressed && styles.pressed]}>
       <View style={[styles.providerRadio, props.selected && styles.providerRadioSelected]}>{props.selected && <Ionicons name="checkmark" size={15} color={color.surface} />}</View>
       <Text style={styles.providerName}>{props.provider.name}</Text>
-      {props.selected && <Text style={styles.selectedLabel}>{t('selected')}</Text>}
     </Pressable>
   );
 }
 
 function ModelPicker(props: { provider?: ProviderOption; selectedModelId?: string; visible: boolean; onClose: () => void; onSelect: (modelId?: string) => void | Promise<void> }) {
+  const [search, setSearch] = useState('');
+  useEffect(() => setSearch(''), [props.provider?.id, props.visible]);
+  const matchingModels = props.provider?.models.filter((model) => `${model.name} ${model.id}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase())) ?? [];
   return (
     <Modal animationType="fade" onRequestClose={props.onClose} transparent visible={props.visible}>
       <SafeAreaView style={styles.modalBackdrop}>
         <View style={styles.modelPicker}>
           <View style={styles.modelPickerHeader}><Text style={styles.promptTitle}>{t('chooseModel')}</Text><IconButton icon="close" label={t('close')} onPress={props.onClose} /></View>
-          <ScrollView contentContainerStyle={styles.modelList}>
+          <ScrollView contentContainerStyle={styles.modelList} keyboardShouldPersistTaps="handled">
+            <TextInput accessibilityLabel={locale === 'ru' ? 'Поиск модели' : 'Search models'} value={search} onChangeText={setSearch} placeholder={locale === 'ru' ? 'Найти модель…' : 'Find a model…'} placeholderTextColor={color.muted} style={styles.modelSearch} />
             <ModelRow label={t('automatic')} selected={!props.selectedModelId} onPress={() => void props.onSelect()} />
-            {props.provider?.models.map((model) => <ModelRow key={model.id} detail={model.id} label={model.name} selected={props.selectedModelId === model.id} onPress={() => void props.onSelect(model.id)} />)}
+            {matchingModels.length === 0 && <Text style={styles.modelOptionDetail}>{locale === 'ru' ? 'Подходящих моделей нет' : 'No matching models'}</Text>}
+            {matchingModels.map((model) => <ModelRow key={model.id} detail={model.id} label={model.name} selected={props.selectedModelId === model.id} onPress={() => void props.onSelect(model.id)} />)}
           </ScrollView>
         </View>
       </SafeAreaView>
@@ -397,12 +403,14 @@ const styles = StyleSheet.create({
   safeArea: { backgroundColor: color.canvas, flex: 1 },
   scroll: { flex: 1 },
   promptKeyboard: { alignItems: 'center', alignSelf: 'stretch', flex: 1, justifyContent: 'center' },
+  modelSearch: { backgroundColor: color.canvas, color: color.ink, minHeight: 48, borderRadius: 12, paddingHorizontal: 14, fontSize: 15, marginBottom: 10 },
+  advancedButton: { alignItems: 'center', flexDirection: 'row', gap: 12, minHeight: 72, paddingHorizontal: 16, marginTop: 14, backgroundColor: color.actionSoft, borderRadius: 16 },
   progress: { flexDirection: 'row', gap: 6, paddingHorizontal: space.lg, paddingTop: space.md },
   progressBar: { backgroundColor: color.line, borderRadius: 2, flex: 1, height: 3 },
   progressBarActive: { backgroundColor: color.action },
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: space.md, paddingTop: space.sm },
   headerSpacer: { width: 48 },
-  headerTitle: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 22, textAlign: 'center' },
+  headerTitle: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 20, textAlign: 'center' },
   content: { padding: space.md, paddingBottom: space.xxl },
   intro: { color: color.muted, fontSize: 15, lineHeight: 22, maxWidth: 340 },
   stepLabel: { color: color.muted, fontFamily: type.ticketBold, fontSize: 13, letterSpacing: 0.7, marginBottom: space.sm, textTransform: 'uppercase' },
@@ -423,7 +431,7 @@ const styles = StyleSheet.create({
   addProvider: { alignItems: 'center', borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, justifyContent: 'center', marginTop: space.lg, minHeight: 50 },
   addProviderText: { color: color.action, fontFamily: type.ticketBold, fontSize: 16 },
   catalog: { borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth, marginTop: space.lg, paddingTop: space.lg },
-  catalogTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 19 },
+  catalogTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 16 },
   searchWrap: { alignItems: 'center', backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', marginTop: space.sm, paddingHorizontal: 13 },
   search: { color: color.ink, flex: 1, fontSize: 15, height: 48, paddingHorizontal: 9 },
   catalogProvider: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
@@ -444,7 +452,7 @@ const styles = StyleSheet.create({
   modelOptionTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 16 },
   modelOptionDetail: { color: color.muted, fontSize: 11, marginTop: 2 },
   prompt: { backgroundColor: color.surface, borderRadius: radius.surface, gap: space.md, maxWidth: 420, padding: space.lg, width: '100%' },
-  promptTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 22, lineHeight: 25 },
+  promptTitle: { color: color.ink, fontFamily: type.ticketBold, fontSize: 20, lineHeight: 25 },
   promptInput: { backgroundColor: color.canvas, borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, color: color.ink, fontSize: 16, minHeight: 50, paddingHorizontal: 14 },
   promptSubmit: { alignItems: 'center', backgroundColor: color.action, borderRadius: radius.control, justifyContent: 'center', minHeight: 50 },
   promptSubmitText: { color: color.surface, fontFamily: type.ticketBold, fontSize: 17 },

@@ -36,3 +36,9 @@ test('user instructions can shape the assistant without replacing CaloDone safet
   assert.match(prompt, /cannot override CaloDone data authorization/);
   assert.match(prompt, /Never claim a change succeeded/);
 });
+
+test('selected-meal photo references use saved evidence before asking for another upload', () => {
+  const prompt = buildChatPrompt({ language: 'English', selectedMealId: 'meal-1', now: 0 });
+  assert.match(prompt, /view_meal_photos before asking.*upload/i);
+  assert.match(prompt, /everything in the picture/);
+});

@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
 import {
   BackHandler,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,6 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useAppDialog } from '../../components/AppDialog';
 import { IconButton, PrimaryButton } from '../../components/controls';
 import { KeyboardSafeArea } from '../../components/KeyboardSafeArea';
 import { ScreenReveal } from '../../components/ScreenReveal';
@@ -17,7 +19,7 @@ import { color, radius, space, type } from '../../design/tokens';
 import type { GoalProfile } from '../../domain/goalEstimator';
 import type { DailyGoals } from '../../domain/meal';
 import type { NotificationPreferences, NutritionUnits } from '../../domain/preferences';
-import { formatNumber, t, type Locale } from '../../i18n';
+import { formatNumber, locale, t, type Locale } from '../../i18n';
 import { SetupScreen } from '../onboarding/SetupScreen';
 
 type SettingsPage = 'root' | 'goals' | 'goal_calculator' | 'units' | 'notifications' | 'language' | 'privacy' | 'about';
@@ -115,7 +117,7 @@ function SettingsHub(props: Parameters<typeof SettingsScreen>[0] & {
     <ScrollView contentContainerStyle={styles.content}>
       <SettingsHeader title={t('settings')} onBack={props.onBack} />
       <SettingsSection title={t('accountAi')}>
-        <SettingsLink label={t('aiProvider')} value={t('providerConnected')} onPress={props.onManageProvider} />
+        <SettingsLink label={t('aiProvider')} value={props.locale === 'ru' ? 'Подключение и параметры анализа' : 'Connection and analysis settings'} onPress={props.onManageProvider} />
       </SettingsSection>
       <SettingsSection title={t('tracking')}>
         <SettingsLink label={t('dailyGoals')} value={props.goals.calories ? `${formatNumber(props.goals.calories)} ${t('kcal')}` : t('noGoal')} onPress={() => props.onOpen('goals')} />
@@ -125,7 +127,7 @@ function SettingsHub(props: Parameters<typeof SettingsScreen>[0] & {
       <SettingsSection title={t('appSection')}>
         <SettingsLink label={t('language')} value={props.locale === 'ru' ? 'Русский' : 'English'} onPress={() => props.onOpen('language')} />
         <SettingsLink label={t('dataPrivacy')} value={t('photosKeptWithMeals')} onPress={() => props.onOpen('privacy')} />
-        <SettingsLink label={t('aboutCalodone')} value={t('versionLabel', { version: '1.0.0' })} onPress={() => props.onOpen('about')} />
+        <SettingsLink label={t('aboutCalodone')} value={t('versionLabel', { version: '1.1.0' })} onPress={() => props.onOpen('about')} />
       </SettingsSection>
     </ScrollView>
   );
@@ -303,12 +305,15 @@ function LanguagePage(props: { locale: Locale; onBack: () => void; onSave: (loca
 }
 
 function PrivacyPage(props: { includePhotos: boolean; importing: boolean; onBack: () => void; onIncludePhotos: (include: boolean) => Promise<void>; onExport: () => Promise<void>; onImport: () => Promise<void>; onExportDiagnostics: () => Promise<void>; onRemoveAllPhotos: () => Promise<void>; onDeleteAllMeals: () => Promise<void> }) {
-  const [confirm, setConfirm] = useState<'photos' | 'data'>();
-  const runConfirmed = async () => {
-    if (confirm === 'photos') await props.onRemoveAllPhotos();
-    if (confirm === 'data') await props.onDeleteAllMeals();
-    setConfirm(undefined);
-  };
+  const dialog = useAppDialog();
+  const confirmRemoval = (kind: 'photos' | 'data') => dialog.show({
+    title: t(kind === 'photos' ? 'removeAllPhotos' : 'deleteAllMealData'),
+    message: t(kind === 'photos' ? 'confirmRemovePhotos' : 'confirmDeleteData'),
+    actions: [
+      { label: t('cancel'), role: 'cancel' },
+      { label: t('delete'), role: 'destructive', onPress: () => void (kind === 'photos' ? props.onRemoveAllPhotos() : props.onDeleteAllMeals()) },
+    ],
+  });
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <SettingsHeader title={t('dataPrivacy')} onBack={props.onBack} />
@@ -318,18 +323,9 @@ function PrivacyPage(props: { includePhotos: boolean; importing: boolean; onBack
         <Pressable disabled={props.importing} onPress={() => void props.onImport()} style={[styles.textAction, props.importing && styles.disabled]}><Text style={styles.textActionLabel}>{t(props.importing ? 'importingData' : 'importMyData')}</Text></Pressable>
         <Pressable onPress={() => void props.onExport()} style={styles.textAction}><Text style={styles.textActionLabel}>{t('exportMyData')}</Text></Pressable>
         <Pressable onPress={() => void props.onExportDiagnostics()} style={styles.textAction}><Text style={styles.textActionLabel}>{t('shareDiagnostics')}</Text></Pressable>
-        <Pressable onPress={() => setConfirm('photos')} style={styles.textAction}><Text style={styles.textActionLabel}>{t('removeAllPhotos')}</Text></Pressable>
-        <Pressable onPress={() => setConfirm('data')} style={styles.textAction}><Text style={styles.dangerLabel}>{t('deleteAllMealData')}</Text></Pressable>
+        <Pressable onPress={() => confirmRemoval('photos')} style={styles.textAction}><Text style={styles.textActionLabel}>{t('removeAllPhotos')}</Text></Pressable>
+        <Pressable onPress={() => confirmRemoval('data')} style={styles.textAction}><Text style={styles.dangerLabel}>{t('deleteAllMealData')}</Text></Pressable>
       </View>
-      {confirm && (
-        <View style={styles.confirmPanel}>
-          <Text style={styles.confirmText}>{t(confirm === 'photos' ? 'confirmRemovePhotos' : 'confirmDeleteData')}</Text>
-          <View style={styles.confirmActions}>
-            <Pressable onPress={() => setConfirm(undefined)} style={styles.confirmButton}><Text style={styles.confirmCancel}>{t('cancel')}</Text></Pressable>
-            <Pressable onPress={() => void runConfirmed()} style={styles.deleteButton}><Text style={styles.deleteButtonText}>{t('delete')}</Text></Pressable>
-          </View>
-        </View>
-      )}
     </ScrollView>
   );
 }
@@ -338,13 +334,13 @@ function AboutPage(props: { onBack: () => void }) {
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <SettingsHeader title={t('aboutCalodone')} onBack={props.onBack} />
-      <View style={styles.aboutMark}><Ionicons name="restaurant-outline" size={30} color={color.surface} /></View>
+      <Image source={require('../../../assets/calodone-fork-icon.png')} style={styles.aboutMark} />
       <Text style={styles.aboutTitle}>CaloDone</Text>
       <Text style={styles.aboutCopy}>{t('aboutBody')}</Text>
       <View style={styles.formPanel}>
-        <InfoRow label={t('version')} value="1.0.0" />
+        <InfoRow label={t('version')} value="1.1.0" />
         <InfoRow label={t('openSource')} value="CaloDone" />
-        <InfoRow label="License" value="MIT" />
+        <InfoRow label={locale === 'ru' ? 'Лицензия' : 'License'} value="MIT" />
       </View>
     </ScrollView>
   );
@@ -357,16 +353,16 @@ function InfoRow(props: { label: string; value: string }) {
 const styles = StyleSheet.create({
   safeArea: { backgroundColor: color.canvas, flex: 1 },
   scroll: { flex: 1 },
-  content: { paddingBottom: space.xxl, paddingHorizontal: space.md },
+  content: { paddingBottom: space.xxl, paddingHorizontal: 20 },
   header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingTop: space.sm },
-  headerTitle: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 22, textAlign: 'center' },
+  headerTitle: { color: color.ink, flex: 1, fontFamily: type.ticketBold, fontSize: 20, textAlign: 'center' },
   headerSpacer: { width: 48 },
   section: { marginTop: space.lg },
-  sectionLabel: { color: color.muted, fontFamily: type.ticketBold, fontSize: 13, letterSpacing: 0.8, marginBottom: 7, marginLeft: 4, textTransform: 'uppercase' },
+  sectionLabel: { color: color.muted, fontFamily: type.ticketBold, fontSize: 12, letterSpacing: 0.4, marginBottom: 7, marginLeft: 4, textTransform: 'uppercase' },
   panel: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
-  link: { alignItems: 'center', borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', minHeight: 66, paddingHorizontal: 14, paddingVertical: 10 },
+  link: { alignItems: 'center', borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', minHeight: 70, paddingHorizontal: 14, paddingVertical: 10 },
   linkCopy: { flex: 1, minWidth: 0 },
-  linkLabel: { color: color.ink, fontFamily: type.ticketBold, fontSize: 17 },
+  linkLabel: { color: color.ink, fontFamily: type.ticketBold, fontSize: 15 },
   linkValue: { color: color.muted, fontSize: 12, marginTop: 3 },
   pageIntro: { color: color.muted, fontSize: 15, lineHeight: 22, marginTop: space.md, maxWidth: 350 },
   formPanel: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, marginTop: space.lg, overflow: 'hidden', paddingHorizontal: 14 },
@@ -383,10 +379,10 @@ const styles = StyleSheet.create({
   error: { color: color.error, fontSize: 13, marginTop: space.md },
   choiceSection: { marginTop: space.lg },
   choiceControl: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.control, borderWidth: StyleSheet.hairlineWidth, flexDirection: 'row', overflow: 'hidden' },
-  choiceButton: { alignItems: 'center', flex: 1, justifyContent: 'center', minHeight: 52 },
-  choiceButtonSelected: { backgroundColor: color.action },
+  choiceButton: { alignItems: 'center', flex: 1, justifyContent: 'center', minHeight: 48 },
+  choiceButtonSelected: { backgroundColor: color.actionSoft },
   choiceText: { color: color.ink, fontFamily: type.ticketBold, fontSize: 16 },
-  choiceTextSelected: { color: color.surface },
+  choiceTextSelected: { color: color.action },
   toggleRow: { alignItems: 'center', borderBottomColor: color.line, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', minHeight: 72, paddingVertical: 10 },
   toggleCopy: { flex: 1, minWidth: 0, paddingRight: space.md },
   toggleHelp: { color: color.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },

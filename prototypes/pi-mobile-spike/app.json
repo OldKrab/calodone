@@ -3,10 +3,10 @@
     "name": "CaloDone",
     "slug": "calodone",
     "scheme": "calodone",
-    "version": "1.0.0",
-    "backgroundColor": "#F3F0EA",
+    "version": "1.1.0",
+    "backgroundColor": "#F5F8F6",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/calodone-fork-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
@@ -20,22 +20,22 @@
     },
     "android": {
       "package": "dev.calodone.pimobilespike",
-      "versionCode": 1,
+      "versionCode": 5,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "backgroundColor": "#59677D",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#176B4D",
+        "foregroundImage": "./assets/calodone-fork-icon.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "icon": "./assets/calodone-fork-icon.png"
     },
     "androidNavigationBar": {
-      "backgroundColor": "#FCFAF5",
+      "backgroundColor": "#F5F8F6",
       "barStyle": "dark-content",
       "enforceContrast": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/calodone-fork-icon.png"
     },
     "plugins": [
       "expo-secure-store",
@@ -66,7 +66,8 @@
             "photo"
           ]
         }
-      ]
+      ],
+      "./plugins/withLauncherInset"
     ]
   }
 }

@@ -1,8 +1,3 @@
-import {
-  BarlowCondensed_600SemiBold,
-  BarlowCondensed_700Bold,
-  useFonts,
-} from '@expo-google-fonts/barlow-condensed';
 import { Ionicons } from '@expo/vector-icons';
 import { Directory, File, Paths } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
@@ -10,7 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 import * as Sharing from 'expo-sharing';
 import { StatusBar } from 'expo-status-bar';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -29,6 +24,7 @@ import {
   getDailyGoals,
   getGoalProfile,
   getPreference,
+  appendDiagnosticEvent,
   initializeMeals,
   listDiagnosticEvents,
   listMeals,
@@ -108,10 +104,6 @@ export default function App() {
 function CaloDoneApp() {
   const dialog = useAppDialog();
   const insets = useSafeAreaInsets();
-  const [fontsLoaded] = useFonts({
-    BarlowCondensed_600SemiBold,
-    BarlowCondensed_700Bold,
-  });
   const [ready, setReady] = useState(false);
   const [showSetup, setShowSetup] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
@@ -138,6 +130,19 @@ function CaloDoneApp() {
   const [mealActivities, setMealActivities] = useState<ReadonlyMap<string, MealActivityStage>>(new Map());
 
   useEffect(() => subscribeMealActivity(setMealActivities), []);
+  useEffect(() => {
+    if (!ready) return;
+    let previousState = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (appState) => {
+      const createdAt = Date.now();
+      void appendDiagnosticEvent({
+        id: `${createdAt.toString(36)}-lifecycle`, createdAt,
+        operation: 'lifecycle', previousState, appState,
+      }).catch(() => undefined);
+      previousState = appState;
+    });
+    return () => subscription.remove();
+  }, [ready]);
 
   const refresh = useCallback(async () => {
     await finalizeExpiredClarifications();
@@ -375,8 +380,8 @@ function CaloDoneApp() {
   };
 
   const answer = async (meal: Meal, value: string) => {
-    await answerMealClarification(meal.id, value);
-    await refresh();
+    try { await answerMealClarification(meal.id, value); }
+    finally { await refresh(); }
   };
 
   const saveMeal = async (capturedAt: number, analysis: MealAnalysis) => {
@@ -602,10 +607,10 @@ function CaloDoneApp() {
       ]);
       await shareJsonExport('calodone-diagnostics.json', t('shareDiagnostics'), {
         exportedAt: new Date().toISOString(),
-        app: { version: '1.0.0', platform: Platform.OS, platformVersion: Platform.Version },
+        app: { version: '1.1.0', platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
-          if (event.operation === 'layout') return event;
+          if (event.operation === 'layout' || event.operation === 'lifecycle') return event;
           const { outputText: _outputText, mealId: _mealId, threadId: _threadId, ...metadata } = event;
           return metadata;
         }),
@@ -673,7 +678,7 @@ function CaloDoneApp() {
     await refreshChats();
   };
 
-  if (!ready || !fontsLoaded) {
+  if (!ready) {
     return <View style={styles.loading}><StatusBar style="dark" /><ActivityIndicator color={color.action} /></View>;
   }
 
@@ -698,7 +703,7 @@ function CaloDoneApp() {
   if (screen === 'camera') {
     return (
       <>
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <CaptureScreen
           error={captureError}
           photos={photos}
@@ -731,6 +736,8 @@ function CaloDoneApp() {
 
   if (screen === 'settings') {
     return (
+      <>
+      <StatusBar style="dark" />
       <SettingsScreen
         goals={goals}
         goalProfile={goalProfile}
@@ -754,6 +761,7 @@ function CaloDoneApp() {
         onSaveNotifications={persistNotifications}
         onSaveUnits={persistUnits}
       />
+      </>
     );
   }
 
@@ -823,6 +831,7 @@ function CaloDoneApp() {
         <MealDetailScreen
           activity={mealActivities.get(selectedMeal.id)}
           initialEditing={Boolean(manualMeal)}
+          creating={Boolean(manualMeal)}
           meal={selectedMeal}
           units={units}
           onAnswer={(value) => answer(selectedMeal, value)}
@@ -886,9 +895,11 @@ function NavigationItem(props: {
   onPress: () => void;
 }) {
   return (
-    <Pressable accessibilityRole="tab" accessibilityState={{ selected: props.active }} onPress={props.onPress} style={({ pressed }) => [styles.navigationItem, pressed && styles.navigationPressed]}>
-      <Ionicons name={props.icon} size={21} color={props.active ? color.action : color.muted} />
-      <Text style={[styles.navigationLabel, props.active && styles.navigationLabelActive]}>{props.label}</Text>
+    <Pressable accessibilityRole="tab" accessibilityState={{ selected: props.active }} onPress={props.onPress} style={styles.navigationItem}>
+      {({ pressed }) => <>
+        <View collapsable={false} style={[styles.navigationIcon, (props.active || pressed) && styles.navigationIconActive, pressed && styles.navigationIconPressed]}><Ionicons name={props.icon} size={22} color={props.active || pressed ? color.action : color.muted} /></View>
+        <Text style={[styles.navigationLabel, props.active && styles.navigationLabelActive]}>{props.label}</Text>
+      </>}
     </Pressable>
   );
 }
@@ -943,8 +954,10 @@ const styles = StyleSheet.create({
   appShell: { backgroundColor: color.canvas, flex: 1 },
   loading: { alignItems: 'center', backgroundColor: color.canvas, flex: 1, justifyContent: 'center' },
   navigation: { alignItems: 'flex-start', backgroundColor: color.surface, borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth, bottom: 0, flexDirection: 'row', left: 0, paddingHorizontal: 28, position: 'absolute', right: 0 },
+  navigationIcon: { alignItems: 'center', justifyContent: 'center', width: 58, height: 30, borderRadius: 999, overflow: 'hidden' },
+  navigationIconActive: { backgroundColor: color.actionSoft },
   navigationItem: { alignItems: 'center', flex: 1, height: 60, justifyContent: 'center', minWidth: 72 },
-  navigationPressed: { backgroundColor: color.surfacePressed },
+  navigationIconPressed: { backgroundColor: color.surfacePressed },
   navigationLabel: { color: color.muted, fontFamily: type.ticket, fontSize: 12, marginTop: 2 },
   navigationLabelActive: { color: color.action, fontFamily: type.ticketBold },
 });

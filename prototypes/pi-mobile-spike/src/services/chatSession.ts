@@ -1,3 +1,5 @@
+import type { ToolExecution } from '../features/chat/activityFeed';
+import { AppState } from 'react-native';
 import type { Agent, AgentMessage } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage } from '@earendil-works/pi-ai';
 import { File } from 'expo-file-system';
@@ -18,6 +20,9 @@ import {
 import { appendDiagnosticEvent, deleteMeal, getDailyGoals, getGoalProfile, getMeal, getPreference, removePreference, replaceMeal, saveDailyGoals, saveGoalProfile } from '../data/mealRepository';
 import type { ChatAction, ChatAttachment, ChatThread, ChatUserMessage } from '../domain/chat';
 import { locale } from '../i18n';
+import { continuationMessages, isConnectionError } from './connectionRecovery';
+import { waitForConnectionRecovery } from './foregroundRecovery';
+import { subscribeMealActivity, type MealActivityStage } from './mealActivity';
 import { acquireChatSessionLease, subscribeToChatAgent } from './chatAgentEvents';
 
 export type ChatSessionSnapshot = {
@@ -25,12 +30,16 @@ export type ChatSessionSnapshot = {
   streamingMessage?: AgentMessage;
   actions: ChatAction[];
   providerActivities: ProviderToolActivity[];
+  toolExecutions?: Record<string, ToolExecution>;
   busy: boolean;
+  mealActivity?: MealActivityStage;
+  recovering?: boolean;
   error?: string;
 };
 
 export type ChatSession = {
   send(text: string, attachments: ChatAttachment[]): Promise<void>;
+  retry(): Promise<void>;
   abort(): void;
   close(): Promise<void>;
 };
@@ -64,16 +73,28 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
   let turnStartedAt = Date.now();
   let agent: Agent;
   let closed = false;
+  let mealActivity: MealActivityStage | undefined;
+  let reloadTask: Promise<void> = Promise.resolve();
+  const toolExecutions: Record<string, ToolExecution> = {};
   const providerActivities = new Map<string, ProviderToolActivity>();
   let persistTask: Promise<void> = Promise.resolve();
+  let hasSent = false;
+  let recovering = false;
+  let recoveryAbort = new AbortController();
 
   const emit = () => input.onChanged({
     messages: agent.state.messages,
     streamingMessage: agent.state.streamingMessage,
     actions,
+    toolExecutions: { ...toolExecutions },
     providerActivities: [...providerActivities.values()],
-    busy: agent.state.isStreaming,
-    error: agent.state.errorMessage,
+    busy: agent.state.isStreaming || recovering,
+    mealActivity,
+    recovering,
+    error: agent.state.errorMessage ?? (() => {
+      const last = agent.state.messages.at(-1);
+      return last?.role === 'assistant' && last.stopReason === 'error' ? last.errorMessage : undefined;
+    })(),
   });
 
   agent = await createChatAgent({
@@ -105,7 +126,12 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
   };
 
   const unsubscribe = subscribeToChatAgent(agent, (event) => {
+    if (event.type === 'tool_execution_start') {
+      toolExecutions[event.toolCallId] = { status: 'running', arguments: event.args };
+    }
     if (event.type === 'tool_execution_end') {
+      const execution = toolExecutions[event.toolCallId];
+      if (execution) toolExecutions[event.toolCallId] = { ...execution, status: recoveryAbort.signal.aborted ? 'cancelled' : event.isError ? 'failed' : 'completed' };
       void listChatActions(input.thread.id).then((next) => {
         actions = next;
         emit();
@@ -119,6 +145,9 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
       void persist().catch(() => undefined);
     }
     if (event.type === 'agent_end') {
+      for (const [id, execution] of Object.entries(toolExecutions)) {
+        if (execution.status === 'running') toolExecutions[id] = { ...execution, status: 'cancelled' };
+      }
       for (const [id, activity] of providerActivities) {
         if (activity.status === 'active') {
           providerActivities.set(id, { ...activity, status: agent.state.errorMessage ? 'error' : 'complete' });
@@ -127,10 +156,47 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
     }
     emit();
   });
+  // Inline answers run in the meal processor, outside this chat agent. Observe
+  // their lifecycle so opening chat mid-request shows progress and fresh results.
+  const unsubscribeMeal = subscribeMealActivity((activities) => {
+    const previous = mealActivity;
+    mealActivity = activities.get(input.selectedMealId ?? input.thread.mealId ?? '');
+    if (previous && !mealActivity && !agent.state.isStreaming) {
+      reloadTask = reloadTask.then(async () => {
+        if (closed) return;
+        const [messages, nextActions] = await Promise.all([
+          loadChatMessages(input.thread.id), listChatActions(input.thread.id),
+        ]);
+        if (closed) return;
+        agent.state.messages = messages;
+        actions = nextActions;
+        await input.onDataChanged();
+        emit();
+      }).catch(() => undefined);
+    }
+    emit();
+  });
   emit();
+
+  const retryFailedResponse = async (wait: boolean) => {
+    const messages = continuationMessages(agent.state.messages);
+    if (!messages || closed) return;
+    recovering = true;
+    emit();
+    try {
+      if (wait) await waitForConnectionRecovery(recoveryAbort.signal);
+      if (closed || recoveryAbort.signal.aborted) return;
+      agent.state.messages = messages;
+      hasSent = true;
+      turnStartedAt = Date.now();
+      await agent.continue();
+    } finally { recovering = false; emit(); }
+  };
 
   const session: ChatSession = {
     send: async (text, attachments) => {
+      if (mealActivity || recovering || agent.state.isStreaming) return;
+      await reloadTask;
       const cleanText = text.trim();
       if (!cleanText && attachments.length === 0) return;
       providerActivities.clear();
@@ -148,20 +214,31 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
         timestamp: Date.now(),
       };
       turnStartedAt = Date.now();
+      hasSent = true;
+      recoveryAbort = new AbortController();
       try {
         await agent.prompt(message);
+        if (isConnectionError(agent.state.errorMessage)) await retryFailedResponse(true);
       } finally {
         emit();
       }
     },
-    abort: () => agent.abort(),
+    retry: async () => {
+      if (mealActivity || recovering || agent.state.isStreaming) return;
+      recoveryAbort = new AbortController();
+      await retryFailedResponse(false);
+    },
+    abort: () => { recoveryAbort.abort(); agent.abort(); },
     close: async () => {
       if (closed) return;
+      await reloadTask;
       closed = true;
+      unsubscribeMeal();
+      recoveryAbort.abort();
       agent.abort();
       await agent.waitForIdle().catch(() => undefined);
       agent.state.messages = agent.state.messages.map(sanitizeChatMessage);
-      await persist().catch(() => undefined);
+      if (hasSent && !mealActivity) await persist().catch(() => undefined);
       unsubscribe();
       releaseLease();
     },
@@ -178,6 +255,7 @@ async function recordChatDiagnostic(threadId: string, startedAt: number, respons
     id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`,
     createdAt: Date.now(),
     operation: 'chat',
+    appState: AppState.currentState,
     threadId,
     provider: response.provider,
     model: response.model,
