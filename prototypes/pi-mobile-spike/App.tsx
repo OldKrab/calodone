@@ -636,7 +636,7 @@ function CaloDoneApp() {
       file.write(JSON.stringify({
         exportedAt: new Date().toISOString(),
         processing: { foregroundServiceActive: foregroundWorkActive(), meals: (await listMeals()).map(meal => ({ status: meal.status, capturedAt: meal.capturedAt, error: meal.error })) },
-        app: { version: '1.1.1', platform: Platform.OS, platformVersion: Platform.Version },
+        app: { version: '1.1.2', platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
           if (event.operation === 'layout' || event.operation === 'lifecycle') return event;
@@ -749,7 +749,7 @@ function CaloDoneApp() {
   if (screen === 'describe') {
     return <>
       <StatusBar style="dark" />
-      <DescribeMealScreen note={note} sending={sending} error={captureError ? t('descriptionSaveError') : undefined} onChange={setNote} onCancel={discardCapture} onSend={() => void sendMeal()} />
+      <DescribeMealScreen note={note} sending={sending} error={captureError ? t('descriptionSaveError') : undefined} onChange={setNote} onCancel={discardCapture} onManual={() => { discardCapture(); addManualMeal(); }} onSend={() => void sendMeal()} />
     </>;
   }
 
@@ -899,12 +899,7 @@ function CaloDoneApp() {
         units={units}
         onAnswer={answer}
         onAskAssistant={(meal) => void openAssistant(meal.id)}
-        onCapture={() => dialog.show({ title: t('addMeal'), actions: [
-          { label: t('takePhoto'), onPress: openCapture },
-          { label: t('describeMeal'), onPress: openDescription },
-          { label: t('enterNutritionManually'), onPress: () => { discardCapture(); addManualMeal(); } },
-          { label: t('cancel'), role: 'cancel' },
-        ] })}
+        onCapture={openCapture}
         onNextDay={() => canGoNext && setSelectedDay(nextDay(selectedDay))}
         onOpen={(meal) => openMeal(meal.id)}
         onMealLongPress={showMealActions}
