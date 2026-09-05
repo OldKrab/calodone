@@ -21,3 +21,16 @@ test('calories per 100 g use the portion mass, including zero-calorie products',
   assert.equal(caloriesPer100Grams(150, '50–70 г'), null);
   assert.equal(caloriesPer100Grams(150, '0 г'), null);
 });
+
+test('recognizes explicit total mass after a portion description', async () => {
+  const { caloriesPer100Grams } = await import('./mealWeight.ts');
+  assert.equal(mealWeightGrams(['1 упаковка, 130 г']), 130);
+  assert.equal(caloriesPer100Grams(702, '1 упаковка, 130 г'), 540);
+  assert.equal(mealWeightGrams(['2 бургера, 604 г', '1 порция (около 100 г)']), 704);
+  assert.equal(mealWeightGrams(['1 pack, 130 g']), 130);
+  assert.equal(mealWeightGrams(['2 упаковки по 130 г']), null);
+  assert.equal(mealWeightGrams(['1 упаковка, 100–130 г']), null);
+  assert.equal(mealWeightGrams(['1 бутылка, 500 мл']), null);
+  assert.equal(mealWeightGrams(['100 граммов, 130 г']), null);
+  assert.equal(mealWeightGrams(['1 pack per, 130 g']), null);
+});
