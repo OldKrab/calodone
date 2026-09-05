@@ -39,3 +39,5 @@ No emulator is required. `npm run android` can install a development build on a 
 - The OAuth adapter follows Pi/OpenAI integration behavior that is not documented as a stable general mobile API and may require upstream maintenance.
 
 Camera zoom uses CameraX-exposed lenses and zoom ranges. An ultrawide choice appears only when Android exposes one to third-party apps. Preview and capture review preserve the full frame; capture requests disable the shutter sound. Diagnostics are saved as JSON to a user-selected folder rather than opening a share sheet.
+
+The patched Android camera must build from source (`expo.autolinking.android.buildFromSource` in package.json). Stock precompiled Expo camera binaries omit the lens adapter; the autolinking regression checks this release boundary. Camera diagnostics record exposed lenses, zoom ranges and capability lookup errors without recording images.

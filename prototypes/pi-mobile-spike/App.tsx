@@ -636,10 +636,10 @@ function CaloDoneApp() {
       file.write(JSON.stringify({
         exportedAt: new Date().toISOString(),
         processing: { foregroundServiceActive: foregroundWorkActive(), meals: (await listMeals()).map(meal => ({ status: meal.status, capturedAt: meal.capturedAt, error: meal.error })) },
-        app: { version: '1.1.2', platform: Platform.OS, platformVersion: Platform.Version },
+        app: { version: '1.1.3', platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
-          if (event.operation === 'layout' || event.operation === 'lifecycle') return event;
+          if (event.operation === 'layout' || event.operation === 'lifecycle' || event.operation === 'camera') return event;
           const { outputText: _outputText, mealId: _mealId, threadId: _threadId, ...metadata } = event;
           return metadata;
         }),

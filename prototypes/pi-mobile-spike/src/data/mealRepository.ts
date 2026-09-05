@@ -74,7 +74,15 @@ export type LifecycleDiagnosticEvent = {
   appState: string;
 };
 
-export type DiagnosticEvent = AiDiagnosticEvent | LayoutDiagnosticEvent | LifecycleDiagnosticEvent;
+export type CameraDiagnosticEvent = {
+  id: string;
+  createdAt: number;
+  operation: 'camera';
+  lenses: Array<{ id: string; scale: number; min: number; max: number; primary: boolean }>;
+  error?: string;
+};
+
+export type DiagnosticEvent = AiDiagnosticEvent | LayoutDiagnosticEvent | LifecycleDiagnosticEvent | CameraDiagnosticEvent;
 
 function fromRow(row: MealRow): Meal {
   const parsedPhotos = JSON.parse(row.photos_json) as Array<Partial<MealPhoto> & Pick<MealPhoto, 'uri' | 'mimeType'>>;
