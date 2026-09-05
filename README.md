@@ -6,7 +6,7 @@
 
 A calm food diary for Android. Add a meal with photos or text, get an editable calorie and macro estimate, and clarify the details in conversation.
 
-**[Download CaloDone 1.1.0](https://github.com/OldKrab/calodone/releases/download/v1.1.0/calodone-1.1.0-arm64.apk)** · [Release notes](https://github.com/OldKrab/calodone/releases/tag/v1.1.0) · [Report an issue](https://github.com/OldKrab/calodone/issues)
+**[Download CaloDone](https://github.com/OldKrab/calodone/releases/latest)** · [Release history](https://github.com/OldKrab/calodone/releases) · [Report an issue](https://github.com/OldKrab/calodone/issues)
 
 ## What you can do
 
@@ -18,15 +18,13 @@ A calm food diary for Android. Add a meal with photos or text, get an editable c
 - Use the Android home-screen capture widget, English or Russian, and configurable notifications and units.
 - Export and import app data from Settings.
 
-Version **1.1.0** introduces the green interface, redesigned welcome and setup screens, the bent-fork icon, clearer chat activity, and fixes for photo clarification and connection recovery.
-
 ## Install and get started
 
 1. Download the **arm64 APK** from [GitHub Releases](https://github.com/OldKrab/calodone/releases/latest) and install it on a compatible Android phone. Android may ask you to allow installation from your browser or file manager.
 2. Complete setup and connect your ChatGPT account through the browser. OpenAI Codex is the currently implemented AI provider.
 3. Tap **Add meal**, capture or choose a photo, or enter a meal without one. Review the estimate and answer any remaining questions.
 
-Install the official APK over an existing CaloDone installation to retain local data. The 1.1.0 release preserves the original application ID and signing certificate. Backups are available in **Settings → Data and privacy**.
+Install the official APK over an existing CaloDone installation to retain local data. Backups are available in **Settings → Data and privacy**.
 
 ## Data and current limits
 
@@ -83,6 +81,6 @@ Keep changes focused, follow [`AGENTS.md`](AGENTS.md) and the product/design ref
 
 ## Releases and license
 
-The [Android release workflow](.github/workflows/android-release.yml) validates the source and builds a signed arm64 APK. Version tags such as `v1.1.0` publish a GitHub release; manual workflow runs produce downloadable build artifacts. The workflow verifies the signing certificate and APK architecture. Signing secrets, APKs, and diagnostic exports are excluded from source control.
+The [Android release workflow](.github/workflows/android-release.yml) validates the source and builds a signed arm64 APK. Version tags (`v*`) publish a GitHub release; manual workflow runs produce downloadable build artifacts. The workflow verifies the signing certificate and APK architecture. Signing secrets, APKs, and diagnostic exports are excluded from source control.
 
 The Android application includes an [MIT license](prototypes/pi-mobile-spike/LICENSE). See the [app README](prototypes/pi-mobile-spike/README.md) for implementation boundaries.
