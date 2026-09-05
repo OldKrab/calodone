@@ -14,6 +14,7 @@ A calm food diary for Android. Add a meal with photos or text, get an editable c
 - Review daily calories, protein, carbohydrates, and fat alongside your goals and meal history.
 - Edit meal ingredients, portions, nutrition values, meal type, and time.
 - Ask the assistant about your meals, answer clarifying questions, and request corrections. Inspect before/after details and undo supported changes.
+- With web search enabled, the assistant researches identifiable products before asking you to transcribe a nutrition label. It checks serving sizes and prioritizes manufacturer and restaurant sources.
 - Follow assistant activity without losing the conversation. Hold message text to select and copy it.
 - Use the Android home-screen capture widget, English or Russian, and configurable notifications and units.
 - Export and import app data from Settings.

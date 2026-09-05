@@ -42,6 +42,7 @@ import { composerBottomSpace, keyboardAvoidingBehavior, keyboardAvoidingOffset, 
 export function AssistantScreen(props: {
   thread: ChatThread;
   selectedMeal?: Meal;
+  meals: Meal[];
   bottomInset: number;
   onDataChanged: () => Promise<void>;
   onHistory: () => void;
@@ -157,7 +158,10 @@ export function AssistantScreen(props: {
     };
   }, [props.thread.id, props.selectedMeal?.id, sessionRevision]);
 
-  const feed = useMemo(() => buildActivityFeed(snapshot), [snapshot]);
+  const feed = useMemo(() => buildActivityFeed({
+    ...snapshot,
+    pendingMealQuestions: Object.fromEntries(props.meals.map(meal => [meal.id, mealQuestions(meal.analysis?.clarification)])),
+  }), [snapshot, props.meals]);
   const toolResults = useMemo(() => {
     const results = new Map<string, Extract<AgentMessage, { role: 'toolResult' }>>();
     for (const message of snapshot.messages) {

@@ -41,3 +41,14 @@ test('an aborted tool is cancelled, not reported as a failed action', () => {
   const items = feed([assistant([call('a')]), { ...result('a'), isError: true }], undefined, false, { a: { status: 'cancelled', arguments: { statusText: 'Read meal' } } });
   if (items[0].kind === 'activity') assert.equal(items[0].tools[0].status, 'cancelled');
 });
+
+test('resolved questions disappear even when appended after the correction reply', () => {
+  const messages = [assistant([{ type: 'text', text: 'Bottle saved; dessert excluded' }]), { role: 'mealQuestion', mealId: 'drink', questions: ['Send label', 'Which dessert?'], timestamp: 2 }];
+  const input = { messages, actions: [], busy: false, pendingMealQuestions: { drink: [] } };
+  const items = buildActivityFeed(input as any);
+  assert.equal(items.length, 1);
+  assert.equal(messages.length, 2, 'history remains intact');
+  const restored = buildActivityFeed({ ...input, pendingMealQuestions: { drink: ['Send label'] } } as any);
+  assert.equal(restored.length, 2);
+  assert.deepEqual((restored[1] as any).message.questions, ['Send label']);
+});

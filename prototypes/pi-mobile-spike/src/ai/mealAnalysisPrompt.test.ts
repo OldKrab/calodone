@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { buildMealAnalysisPrompt, MEAL_ANALYSIS_PROMPT_VERSION } from './mealAnalysisPrompt.ts';
+import { buildMealAnalysisPrompt, buildMealRefinementPrompt, buildMealCorrectionPrompt, MEAL_ANALYSIS_PROMPT_VERSION } from './mealAnalysisPrompt.ts';
 
 test('analysis contract handles material visual uncertainty without food-specific rules', () => {
   const prompt = buildMealAnalysisPrompt('English');
@@ -22,4 +22,15 @@ test('descriptions are sufficient evidence and missing portions do not require a
   const prompt = buildMealAnalysisPrompt('English');
   assert.match(prompt, /A text description alone is sufficient input/);
   assert.match(prompt, /ask about the food or portion instead/);
+});
+
+test('initial analysis, clarification and correction research products before asking for labels', () => {
+  for (const build of [buildMealAnalysisPrompt, buildMealRefinementPrompt, buildMealCorrectionPrompt]) {
+    const prompt = build('English');
+    assert.match(prompt, /Research nutrition proactively/);
+    assert.match(prompt, /search BEFORE asking the user/);
+    assert.match(prompt, /alternative queries/);
+    assert.match(prompt, /per 100 g.*per serving/);
+    assert.match(prompt, /Never claim.*searched.*unless/);
+  }
 });
