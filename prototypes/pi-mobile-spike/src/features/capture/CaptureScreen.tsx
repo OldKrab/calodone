@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconButton } from '../../components/controls';
 import { color, radius, space, type } from '../../design/tokens';
 import type { MealPhoto } from '../../domain/meal';
+import { appendDiagnosticEvent } from '../../data/mealRepository';
 import { t } from '../../i18n';
 
 export function CaptureScreen(props: {
@@ -50,7 +51,17 @@ export function CaptureScreen(props: {
   });
   const cameraReady = async () => {
     setReady(true);
-    try { setLenses(parseCameraLenses(await camera.current?.getAvailableLensesAsync() ?? [])); } catch { setLenses([]); }
+    let available: CameraLens[] = [];
+    let capabilityError: string | undefined;
+    try {
+      available = parseCameraLenses(await camera.current?.getAvailableLensesAsync() ?? []);
+      if (!available.length) capabilityError = 'Camera returned no lens capabilities';
+    } catch (error) { capabilityError = String(error); }
+    setLenses(available);
+    void appendDiagnosticEvent({
+      id: `${Date.now().toString(36)}-camera-${Math.random().toString(36).slice(2, 8)}`,
+      createdAt: Date.now(), operation: 'camera', lenses: available, error: capabilityError,
+    }).catch(() => undefined);
   };
   const [flash, setFlash] = useState<'off' | 'on'>('off');
   const [error, setError] = useState('');
