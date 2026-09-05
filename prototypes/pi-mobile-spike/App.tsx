@@ -636,7 +636,7 @@ function CaloDoneApp() {
       file.write(JSON.stringify({
         exportedAt: new Date().toISOString(),
         processing: { foregroundServiceActive: foregroundWorkActive(), meals: (await listMeals()).map(meal => ({ status: meal.status, capturedAt: meal.capturedAt, error: meal.error })) },
-        app: { version: '1.1.4', platform: Platform.OS, platformVersion: Platform.Version },
+        app: { version: '1.1.5', platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
           if (event.operation === 'layout' || event.operation === 'lifecycle' || event.operation === 'camera' || event.operation === 'web_search') return event;

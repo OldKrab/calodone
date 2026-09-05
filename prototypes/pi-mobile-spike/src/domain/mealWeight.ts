@@ -12,3 +12,12 @@ export function mealWeightGrams(quantities: readonly string[]): number | null {
   }
   return Number.isFinite(total) && total > 0 ? total : null;
 }
+
+/** Derived from the saved portion, not an independent label measurement.
+ * Unknown mass stays unknown; volumes must never be treated as grams. */
+export function caloriesPer100Grams(calories: number, quantity: string): number | null {
+  const grams = mealWeightGrams([quantity]);
+  if (grams === null || !Number.isFinite(calories) || calories < 0) return null;
+  const value = calories / grams * 100;
+  return Number.isFinite(value) ? value : null;
+}
