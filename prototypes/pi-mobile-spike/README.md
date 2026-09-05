@@ -5,7 +5,7 @@ This directory contains the production CaloDone Android app. Its name comes from
 ## Current flow
 
 1. Connect a ChatGPT account through browser OAuth.
-2. Tap **Add meal** and choose a photo, **Describe meal**, or manual nutrition entry.
+2. Tap **Add meal** to open the camera directly. Gallery and **Describe meal** are secondary actions on the camera screen; manual nutrition entry is available from the description screen.
 3. Take or choose photos, or describe the meal in text, then start analysis.
 4. Return immediately to the Today screen while CaloDone recognizes the complete meal.
 5. Answer any remaining clarification questions if needed. Unanswered clarifications become **Estimated** after 24 hours.

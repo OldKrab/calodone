@@ -3,7 +3,7 @@
     "name": "CaloDone",
     "slug": "calodone",
     "scheme": "calodone",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "backgroundColor": "#F5F8F6",
     "orientation": "portrait",
     "icon": "./assets/calodone-fork-icon.png",
@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "dev.calodone.pimobilespike",
-      "versionCode": 6,
+      "versionCode": 7,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#176B4D",

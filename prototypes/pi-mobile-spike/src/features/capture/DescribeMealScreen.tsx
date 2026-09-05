@@ -1,4 +1,4 @@
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { IconButton, PrimaryButton } from '../../components/controls';
 import { color, radius, space, type } from '../../design/tokens';
@@ -12,6 +12,7 @@ export function DescribeMealScreen(props: {
   onChange: (value: string) => void;
   onCancel: () => void;
   onSend: () => void;
+  onManual: () => void;
 }) {
   return <SafeAreaView style={styles.screen}>
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -33,6 +34,9 @@ export function DescribeMealScreen(props: {
         <Text style={styles.hint}>{t('describeMealHint')}</Text>
         {props.error && <Text accessibilityRole="alert" style={styles.error}>{props.error}</Text>}
         <PrimaryButton label={t('analyzeMeal')} busy={props.sending} disabled={!hasMealInput({ photos: [], note: props.note })} onPress={props.onSend} />
+        <Pressable accessibilityRole="button" disabled={props.sending} onPress={props.onManual} style={({ pressed }) => ({ minHeight: 48, justifyContent: 'center', opacity: props.sending ? 0.4 : pressed ? 0.7 : 1 })}>
+          <Text style={{ color: color.action, textAlign: 'center', fontSize: 14 }}>{t('enterNutritionManually')}</Text>
+        </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
   </SafeAreaView>;
