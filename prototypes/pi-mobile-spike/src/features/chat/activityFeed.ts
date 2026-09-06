@@ -7,7 +7,7 @@ export type ToolStatus = 'preparing' | 'running' | 'completed' | 'failed' | 'can
 export type ToolExecution = { status: ToolStatus; arguments: Record<string, unknown> };
 export type ActivityTool = { call: ToolCall; status: ToolStatus };
 export type ActivityFeedItem =
-  | { kind: 'message'; key: string; message: AgentMessage }
+  | { kind: 'message'; key: string; message: AgentMessage; activeQuestions?: string[] }
   | { kind: 'question'; key: string; questions: QuestionChoices[]; active: boolean }
   | { kind: 'activity'; key: string; tools: ActivityTool[] }
   | { kind: 'action'; key: string; action: ChatAction };
@@ -21,7 +21,8 @@ export function buildActivityFeed(input: {
   actions: ChatAction[];
   busy: boolean;
   toolExecutions?: Record<string, ToolExecution>;
-  /** Current meal state controls actionable cards; durable history is not a pending queue. */
+  /** Retained for callers supplying current meal state. History remains visible
+   * regardless of whether a question is still actionable or being answered. */
   pendingMealQuestions?: Record<string, string[]>;
   answeringMealIds?: ReadonlySet<string>;
 }): ActivityFeedItem[] {
@@ -29,6 +30,7 @@ export function buildActivityFeed(input: {
   if (input.streamingMessage && !messages.includes(input.streamingMessage)) messages.push(input.streamingMessage);
   const results = new Map(messages.flatMap(message => message.role === 'toolResult' ? [[message.toolCallId, message] as const] : []));
   const lastUser = messages.findLastIndex(message => message.role === 'chatUser' || message.role === 'user');
+  const latestQuestion = new Map(messages.flatMap((message, index) => message.role === 'mealQuestion' ? [[message.mealId, index] as const] : []));
   const feed: ActivityFeedItem[] = [];
   let group: Extract<ActivityFeedItem, { kind: 'activity' }> | undefined;
   const receipts = [...input.actions].sort((a, b) => a.createdAt - b.createdAt);
@@ -44,13 +46,12 @@ export function buildActivityFeed(input: {
     if (message.role !== 'assistant') {
       group = undefined;
       flushReceipts(message.timestamp);
-      if (message.role === 'mealQuestion' && input.answeringMealIds?.has(message.mealId)) continue;
-      if (message.role === 'mealQuestion' && input.pendingMealQuestions) {
-        const pending = input.pendingMealQuestions[message.mealId] ?? [];
-        const questions = message.questions.filter(question => pending.includes(question));
-        if (questions.length) feed.push({ kind: 'message', key, message: { ...message, questions } });
-      } else if (message.role === 'chatUser' || message.role === 'mealQuestion') {
-        feed.push({ kind: 'message', key, message });
+      if (message.role === 'chatUser' || message.role === 'mealQuestion') {
+        const activeQuestions = message.role === 'mealQuestion'
+          ? latestQuestion.get(message.mealId) === index && !input.answeringMealIds?.has(message.mealId)
+            ? message.questions.filter(question => !input.pendingMealQuestions || input.pendingMealQuestions[message.mealId]?.includes(question)) : []
+          : undefined;
+        feed.push({ kind: 'message', key, message, activeQuestions });
       }
       continue;
     }

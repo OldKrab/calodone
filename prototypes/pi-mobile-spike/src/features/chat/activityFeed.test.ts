@@ -42,13 +42,20 @@ test('an aborted tool is cancelled, not reported as a failed action', () => {
   if (items[0].kind === 'activity') assert.equal(items[0].tools[0].status, 'cancelled');
 });
 
-test('resolved questions disappear even when appended after the correction reply', () => {
-  const messages = [assistant([{ type: 'text', text: 'Bottle saved; dessert excluded' }]), { role: 'mealQuestion', mealId: 'drink', questions: ['Send label', 'Which dessert?'], timestamp: 2 }];
-  const input = { messages, actions: [], busy: false, pendingMealQuestions: { drink: [] } };
-  const items = buildActivityFeed(input as any);
-  assert.equal(items.length, 1);
-  assert.equal(messages.length, 2, 'history remains intact');
-  const restored = buildActivityFeed({ ...input, pendingMealQuestions: { drink: ['Send label'] } } as any);
-  assert.equal(restored.length, 2);
-  assert.deepEqual((restored[1] as any).message.questions, ['Send label']);
+test('answered questions remain in chat history while the answer is processing and after resolution', () => {
+  const question={role:'mealQuestion',mealId:'m',questions:['How large is the portion?'],timestamp:1};
+  const answer={role:'chatUser',text:"I don't know. Stop asking.",attachments:[],timestamp:2};
+  for(const busy of [true,false]) {
+    const items=buildActivityFeed({messages:[question,answer] as any,actions:[],busy,
+      answeringMealIds:new Set(busy?['m']:[]),pendingMealQuestions:{m:[]}});
+    assert.deepEqual(items.filter(item=>item.kind==='message').map(item=>item.message),[question,answer]);
+  }
+});
+
+test('only the latest unresolved question has answer controls; older questions stay readable', () => {
+  const old={role:'mealQuestion',mealId:'m',questions:['How much?'],timestamp:1};
+  const latest={...old,timestamp:3,questions:['How much?','Which sauce?']};
+  const items=buildActivityFeed({messages:[old,latest] as any,actions:[],busy:false,pendingMealQuestions:{m:['Which sauce?']}});
+  assert.equal(items.length,2);
+  assert.deepEqual(items.map(item=>item.kind==='message'?item.activeQuestions:undefined),[[],['Which sauce?']]);
 });

@@ -317,6 +317,7 @@ export function AssistantScreen(props: {
             ) : (
               feed.map((item) => item.kind === 'message'
                 ? <MessageRow key={item.key} message={item.message}
+                    activeQuestions={item.activeQuestions}
                     choices={item.message.role === 'mealQuestion' ? mealChoicesById.get(item.message.mealId) : undefined}
                     disabled={!session || snapshot.busy || Boolean(snapshot.mealActivity)}
                     onAnswer={sendAnswer} />
@@ -501,6 +502,7 @@ function EmptyAssistant(props: { selectedMeal: boolean; onSuggestion: (value: st
 
 function MessageRow(props: {
   message: AgentMessage;
+  activeQuestions?: string[];
   choices?: QuestionChoices[];
   disabled?: boolean;
   onAnswer: (answer: string) => Promise<void>;
@@ -508,12 +510,16 @@ function MessageRow(props: {
   if (props.message.role === 'toolResult' || props.message.role === 'user') return null;
   if (props.message.role === 'mealQuestion') {
     const questionMessage = props.message as ChatMealQuestionMessage;
+    const activeQuestions = questionMessage.questions.filter(question => props.activeQuestions?.includes(question));
     return (
       <View style={styles.questionMessage}>
         <Text style={styles.questionMessageLabel}>{t('clarificationTitle')}</Text>
-        <QuestionAnswers key={JSON.stringify(props.choices)}
-          questions={questionMessage.questions.map(question => ({ question, options: props.choices?.find(choice => choice.question === question)?.options ?? [] }))}
-          disabled={props.disabled} onSubmit={props.onAnswer} />
+        {questionMessage.questions.filter(question => !activeQuestions.includes(question)).map((question, index) => (
+          <Text selectable key={`${question}-${index}`} style={styles.questionMessageText}>{question}</Text>
+        ))}
+        {activeQuestions.length > 0 && <QuestionAnswers key={JSON.stringify([activeQuestions, props.choices])}
+          questions={activeQuestions.map(question => ({ question, options: props.choices?.find(choice => choice.question === question)?.options ?? [] }))}
+          disabled={props.disabled} onSubmit={props.onAnswer} />}
       </View>
     );
   }
@@ -689,6 +695,7 @@ const styles = StyleSheet.create({
   assistantMessage: { maxWidth: '94%', paddingHorizontal: 2 },
   questionMessage: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, maxWidth: '94%', padding: space.md },
   questionMessageLabel: { color: color.pending, fontFamily: type.ticketBold, fontSize: 13, letterSpacing: 0.35, marginBottom: 3 },
+  questionMessageText: { color: color.ink, fontSize: 16, fontWeight: '600', lineHeight: 22, marginTop: 5 },
   working: { alignItems: 'center', flexDirection: 'row', gap: space.sm, paddingVertical: space.sm },
   workingText: { color: color.muted, fontSize: 13 },
   toolActivity: { alignItems: 'center', flexDirection: 'row', gap: space.sm, minHeight: 34, paddingVertical: 6 },

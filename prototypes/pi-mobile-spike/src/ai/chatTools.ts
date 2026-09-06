@@ -20,6 +20,7 @@ import { estimateDailyGoals, mergeGoalProfile, parseGoalProfile, type GoalProfil
 import type { ChatAttachment } from '../domain/chat';
 import type { DailyGoals, Meal, MealAnalysis, MealItem, MealPhoto, MealStatus } from '../domain/meal';
 import { analysisFromItems, applyMealEdit, summarizeNutrition } from '../domain/mealOperations';
+import { scaleSingleItemPortion } from '../domain/mealWeight';
 import { locale, t } from '../i18n';
 import { mealRequestContext } from './mealRequestContext';
 import { answerMealClarification, reanalyzeSavedMeal } from '../services/mealProcessor';
@@ -35,7 +36,7 @@ type CreateMealParams = ActivityParams & {
 };
 type EditMealParams = ActivityParams & {
   mealId: string; expectedRevision: number; capturedAt?: string; note?: string; title?: string;
-  mealType?: MealAnalysis['mealType']; items?: MealItem[]; addAttachmentIds?: string[]; removePhotoIds?: string[];
+  mealType?: MealAnalysis['mealType']; items?: MealItem[]; portionGrams?: number; addAttachmentIds?: string[]; removePhotoIds?: string[];
 };
 type MealMutationParams = ActivityParams & { mealId: string; expectedRevision: number };
 type ReanalyzeMealParams = MealMutationParams & { interpretation?: string; requireSearch?: boolean };
@@ -200,26 +201,30 @@ export function createCalDoneTools(input: {
     {
       name: 'edit_meal',
       label: 'Edit meal',
-      description: 'Patch one current meal after reading it. CalDone derives totals and preserves unrelated analysis state.',
+      description: 'Patch one current meal after reading it. Use portionGrams for a weight-only correction to one saved food item with a known weight; CalDone scales its saved nutrition without another model or web request.',
       executionMode: 'sequential',
       parameters: Type.Object({
         mealId: Type.String(), expectedRevision: Type.Number({ minimum: 1 }),
         capturedAt: Type.Optional(Type.String({ description: 'ISO timestamp.' })), note: Type.Optional(Type.String()),
         title: Type.Optional(Type.String({ minLength: 1 })), mealType: Type.Optional(mealTypeSchema),
+        portionGrams: Type.Optional(Type.Number({ exclusiveMinimum: 0, maximum: 100_000, description: 'Explicit corrected weight in grams for a single saved food item. Do not combine with items.' })),
         items: Type.Optional(Type.Array(itemSchema, { minItems: 1 })), addAttachmentIds: Type.Optional(Type.Array(Type.String())),
         removePhotoIds: Type.Optional(Type.Array(Type.String())), statusText: activitySchema,
       }, { additionalProperties: false }),
       execute: async (callId, rawParams) => withReceipt(callId, input.threadId, async () => {
         const params = rawParams as EditMealParams;
+        if (params.portionGrams !== undefined && params.items) throw new Error('Provide either portionGrams or items, not both.');
         if (params.items && mealRequestContext(input.getMessages()).requireSearch) throw new Error("Use reanalyze_meal to research and recalculate the requested nutrition before saving it.");
         const before = await requiredMeal(params.mealId);
         requireRevision(before, params.expectedRevision);
-        if (!before.analysis && (params.title || params.mealType || params.items)) throw new Error('This meal has no nutrition estimate. Reanalyze it or edit only its time, note, or photos.');
+        if (!before.analysis && (params.title || params.mealType || params.items || params.portionGrams !== undefined)) throw new Error('This meal has no nutrition estimate. Reanalyze it or edit only its time, note, or photos.');
         requireMealEdit(params);
+        // Changing a known mass does not research or replace the product's nutrition density.
+        const items = params.portionGrams === undefined ? params.items : scaleSingleItemPortion(before.analysis!.items, params.portionGrams);
         const addedPhotos = await copyAttachments(before.id, params.addAttachmentIds ?? [], input.attachments);
         const draft = applyMealEdit(before, {
           capturedAt: parseTimestamp(params.capturedAt), note: params.note, title: params.title,
-          mealType: params.mealType, items: params.items, addPhotos: addedPhotos, removePhotoIds: params.removePhotoIds,
+          mealType: params.mealType, items, addPhotos: addedPhotos, removePhotoIds: params.removePhotoIds,
         });
         const next = await replaceMealIfRevision(draft, params.expectedRevision);
         if (!next) {
@@ -443,7 +448,7 @@ async function createCompleteMeal(mealId: string, params: CreateMealParams, atta
 }
 
 function requireMealEdit(params: EditMealParams): void {
-  const fields = [params.capturedAt, params.note, params.title, params.mealType, params.items, params.addAttachmentIds, params.removePhotoIds];
+  const fields = [params.capturedAt, params.note, params.title, params.mealType, params.items, params.portionGrams, params.addAttachmentIds, params.removePhotoIds];
   if (fields.every((value) => value === undefined)) throw new Error('No meal fields were provided to change.');
 }
 

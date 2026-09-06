@@ -32,7 +32,7 @@ const sources:Record<string,string>={
   './openaiCodexMobileProvider':'export const openaiCodexMobileProvider=()=>({});',
   './secureCredentialStore':'export class SecureCredentialStore {}',
   '../services/foregroundRecovery':'export const waitForConnectionRecovery=async()=>{};',
-  '../data/mealRepository':'export const appendDiagnosticEvent=async event=>{globalThis.__mealProvider.events.push(event)};',
+  '../data/mealRepository':'export const getMeal=async()=>undefined;export const appendDiagnosticEvent=async event=>{globalThis.__mealProvider.events.push(event)};',
 };
 registerHooks({resolve(specifier,context,next){
   if(sources[specifier])return {url:'data:text/javascript,'+encodeURIComponent(sources[specifier]),shortCircuit:true};

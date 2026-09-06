@@ -34,3 +34,14 @@ test('initial analysis, clarification and correction research products before as
     assert.match(prompt, /Never claim.*searched.*unless/);
   }
 });
+
+
+test('unknown portions and refusal to answer end clarification in every meal path', () => {
+  for (const build of [buildMealAnalysisPrompt, buildMealRefinementPrompt, buildMealCorrectionPrompt]) {
+    const prompt=build('English');
+    assert.match(prompt,/If the user does not know the portion/);
+    assert.match(prompt,/do not ask for weight, dimensions, counts/);
+    assert.match(prompt,/omit clarification entirely/);
+    assert.match(prompt,/explicitly approximate/);
+  }
+});
