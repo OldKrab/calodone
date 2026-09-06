@@ -1,3 +1,5 @@
+import appConfig from './app.json';
+import { mealRequestDiagnostics } from './src/services/mealRequestTraceStore';
 import { submitMealAnswer, subscribeMealAnswers } from './src/services/mealAnswerSubmission';
 import { foregroundWorkActive } from './src/services/foregroundWork';
 import { DescribeMealScreen } from './src/features/capture/DescribeMealScreen';
@@ -624,6 +626,22 @@ function CalDoneApp() {
     }
   };
 
+  const recordNextAnalysis = () => {
+    try {
+      mealRequestDiagnostics.arm();
+      showInfo(locale === 'ru' ? 'Запись теста включена' : 'Test capture enabled', locale === 'ru'
+        ? 'Добавьте одно блюдо с фото и дождитесь результата. Затем сохраните диагностику здесь. Она будет содержать фото, запрос и ответ модели. Повторное включение заменяет предыдущую запись.'
+        : 'Add one meal with a photo and wait for the result, then save diagnostics here. The export will include the photo, request and model response. Arming again replaces the previous capture.');
+    } catch { showInfo(t('exportFailedTitle'), t('diagnosticsExportFailedBody')); }
+  };
+
+  const clearTestCapture = () => {
+    try {
+      mealRequestDiagnostics.clear();
+      showInfo(locale === 'ru' ? 'Тестовая запись удалена' : 'Test capture deleted', locale === 'ru' ? 'Запись следующего запроса отключена.' : 'Capture of the next request is disabled.');
+    } catch { showInfo(t('exportFailedTitle'), t('diagnosticsExportFailedBody')); }
+  };
+
   const exportDiagnostics = async () => {
     try {
       const provider = await getSelectedProvider();
@@ -639,7 +657,8 @@ function CalDoneApp() {
       file.write(JSON.stringify({
         exportedAt: new Date().toISOString(),
         processing: { foregroundServiceActive: foregroundWorkActive(), meals: (await listMeals()).map(meal => ({ status: meal.status, capturedAt: meal.capturedAt, error: meal.error })) },
-        app: { version: '1.2.0', platform: Platform.OS, platformVersion: Platform.Version },
+        testRequest: mealRequestDiagnostics.read(),
+        app: { version: appConfig.expo.version, platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
           if (event.operation === 'layout' || event.operation === 'lifecycle' || event.operation === 'camera' || event.operation === 'web_search') return event;
@@ -655,12 +674,14 @@ function CalDoneApp() {
   };
 
   const removeSavedPhotos = async () => {
+    mealRequestDiagnostics.clear();
     const removed = await removeAllMealPhotos();
     removed.forEach(deletePhoto);
     await refresh();
   };
 
   const removeAllSavedMeals = async () => {
+    mealRequestDiagnostics.clear();
     const removed = await deleteAllMeals();
     removed.forEach(deletePhoto);
     await deleteAllChatData();
@@ -794,6 +815,8 @@ function CalDoneApp() {
         onExport={exportData}
         onImport={importData}
         onExportDiagnostics={exportDiagnostics}
+        onRecordNextAnalysis={recordNextAnalysis}
+        onClearTestCapture={clearTestCapture}
         onIncludePhotosInExport={persistExportPhotos}
         onManageProvider={() => setScreen('providers')}
         onRemoveAllPhotos={removeSavedPhotos}

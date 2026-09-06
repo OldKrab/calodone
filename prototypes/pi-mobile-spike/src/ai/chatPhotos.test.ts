@@ -21,6 +21,7 @@ fixture.fetch=async(_url:any,init:any)=>{
 };
 (globalThis as any).__chatPhotos=fixture; fixture.Agent=Agent;
 const sources:Record<string,string>={
+  '../services/mealRequestTraceStore':'export const mealRequestDiagnostics={begin:()=>undefined};',
   '@earendil-works/pi-agent-core':'export const Agent=globalThis.__chatPhotos.Agent;',
   '@earendil-works/pi-ai':`export const contentText=content=>content.filter(x=>x.type==='text').map(x=>x.text).join('');
     export const getSupportedThinkingLevels=()=>[];export const createModels=()=>({setProvider(){},getModel:()=>globalThis.__chatPhotos.model,getModels:()=>[globalThis.__chatPhotos.model],streamSimple:(...args)=>globalThis.__chatPhotos.stream(...args)});`,

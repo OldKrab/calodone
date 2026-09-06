@@ -84,6 +84,8 @@ The APK is written to `artifacts/caldone-<version>-arm64.apk` at the repository 
 
 Issues and pull requests are welcome. For bug reports, include the app version, device/Android version, reproduction steps, and relevant screenshots. Review diagnostic exports before posting them publicly, and never include credentials or personal meal data you do not want to share.
 
+For a misidentified photo, open Settings → Data & privacy → Capture next analysis with photo, then add one test meal and wait for its result. Save diagnostics from the same settings page. This opt-in export contains the source photo, allowed JSON fields captured at the HTTP send boundary, and the parsed model response; it excludes HTTP headers and authentication credentials. It keeps only the latest capture (up to three attempts), survives restarting the app, and can be removed with Delete test capture. Removing all meal photos or meal data also removes the capture. Ordinary analysis is not recorded in this way.
+
 Keep changes focused, follow [`AGENTS.md`](AGENTS.md) and the product/design references, and run TypeScript and relevant tests before opening a PR. Include screenshots for interface changes and describe any behavior that still needs device verification.
 
 ## Releases and license
