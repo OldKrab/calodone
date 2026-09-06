@@ -43,3 +43,11 @@ test('selected-meal photo references use saved evidence before asking for anothe
   assert.match(prompt, /view_meal_photos before asking.*upload/i);
   assert.match(prompt, /everything in the picture/);
 });
+
+
+test('a user who cannot quantify their portion is not asked for alternative measurements', () => {
+  const prompt=buildChatPrompt({language:'Russian',now:0});
+  assert.match(prompt,/If the user does not know the portion/);
+  assert.match(prompt,/do not ask for weight, dimensions, counts/);
+  assert.match(prompt,/finish the estimate with answer_meal_question/);
+});

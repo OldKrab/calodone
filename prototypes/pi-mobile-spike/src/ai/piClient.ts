@@ -1,4 +1,5 @@
 import { trackedSearchFetch, withHostedSearch } from './hostedSearch';
+import { restoreChatMealPhotos } from './chatMealPhotos';
 import { acceptMealResearch, MealResearchError } from './mealResearchResult';
 import { explicitlyRequestsSearch, type MealResearch } from '../domain/mealResearch';
 import { requestWithDeadline } from '../services/requestDeadline';
@@ -366,7 +367,9 @@ async function convertChatMessages(messages: AgentMessage[]): Promise<Message[]>
         }],
         timestamp: question.timestamp,
       });
-    } else if (message.role === 'user' || message.role === 'assistant' || message.role === 'toolResult') {
+    } else if (message.role === 'toolResult') {
+      converted.push(await restoreChatMealPhotos(message) as Message);
+    } else if (message.role === 'user' || message.role === 'assistant') {
       converted.push(message);
     }
   }

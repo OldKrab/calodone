@@ -19,7 +19,8 @@ export function buildActivityFeed(input: {
   actions: ChatAction[];
   busy: boolean;
   toolExecutions?: Record<string, ToolExecution>;
-  /** Current meal state controls actionable cards; durable history is not a pending queue. */
+  /** Retained for callers supplying current meal state. History remains visible
+   * regardless of whether a question is still actionable or being answered. */
   pendingMealQuestions?: Record<string, string[]>;
   answeringMealIds?: ReadonlySet<string>;
 }): ActivityFeedItem[] {
@@ -42,12 +43,7 @@ export function buildActivityFeed(input: {
     if (message.role !== 'assistant') {
       group = undefined;
       flushReceipts(message.timestamp);
-      if (message.role === 'mealQuestion' && input.answeringMealIds?.has(message.mealId)) continue;
-      if (message.role === 'mealQuestion' && input.pendingMealQuestions) {
-        const pending = input.pendingMealQuestions[message.mealId] ?? [];
-        const questions = message.questions.filter(question => pending.includes(question));
-        if (questions.length) feed.push({ kind: 'message', key, message: { ...message, questions } });
-      } else if (message.role === 'chatUser' || message.role === 'mealQuestion') {
+      if (message.role === 'chatUser' || message.role === 'mealQuestion') {
         feed.push({ kind: 'message', key, message });
       }
       continue;

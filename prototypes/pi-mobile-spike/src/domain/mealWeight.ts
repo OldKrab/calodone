@@ -1,3 +1,22 @@
+import type { MealItem } from './meal';
+
+/** Weight-only corrections preserve the saved product's nutrition density.
+ * Unknown mass and mixed meals cannot be proportionally scaled safely. */
+export function scaleSingleItemPortion(items: MealItem[], grams: number): MealItem[] {
+  if (items.length !== 1) throw new Error('A direct portion correction requires one saved food item.');
+  const item = items[0];
+  const previousGrams = mealWeightGrams([item.quantity]);
+  if (previousGrams === null) throw new Error('The saved portion has no known weight. Reanalyze the meal with the user’s correction.');
+  if (!Number.isFinite(grams) || grams <= 0 || grams > 100_000) throw new Error('Portion weight must be positive and at most 100000 grams.');
+  const scaled = { ...item, quantity: `${grams} g` };
+  for (const key of ['calories', 'protein', 'carbs', 'fat'] as const) {
+    const value = item[key] * grams / previousGrams;
+    if (!Number.isFinite(value) || value < 0 || value > 100_000) throw new Error('The corrected nutrition is outside the supported range.');
+    scaled[key] = value;
+  }
+  return [scaled];
+}
+
 /** Legacy quantities are prose, not structured mass. Only sum unambiguous
  * masses, including a total following a portion count; volumes and ranges cannot be inferred. */
 export function mealWeightGrams(quantities: readonly string[]): number | null {

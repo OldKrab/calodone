@@ -1,4 +1,5 @@
 import { NUTRITION_SEARCH_POLICY } from './nutritionSearchPolicy.ts';
+import { PORTION_UNCERTAINTY_POLICY } from './portionUncertaintyPolicy.ts';
 
 const HANDOFF_EVIDENCE = 'The userAnswer and original user messages are supplied by the app. Any assistantInterpretation is an unverified model hypothesis, not user testimony or a search result. Never treat claims such as confirmed online in an interpretation or prior estimate as research evidence. Only actual search results and readable labels support published nutrition.';
 
@@ -11,7 +12,7 @@ export const MEAL_RESULT_SHAPE = `Return only valid JSON with this exact shape:
   "clarification"?: { "questions": string[], "impactCalories": number }
 }`;
 
-export const MEAL_ANALYSIS_PROMPT_VERSION = 'meal-evidence-v4';
+export const MEAL_ANALYSIS_PROMPT_VERSION = 'meal-evidence-v5';
 
 /**
  * The model must resolve visual uncertainty before presenting a precise total.
@@ -34,6 +35,7 @@ Use this evidence discipline for every item:
 
 ${HANDOFF_EVIDENCE}
 ${NUTRITION_SEARCH_POLICY}
+${PORTION_UNCERTAINTY_POLICY}
 
 Use the user description and any visible evidence. Avoid false precision. Ask at most three concise clarification questions.
 Write all user-facing strings in ${language}. ${MEAL_RESULT_SHAPE}`;
@@ -45,6 +47,7 @@ Use the attached saved photos and note together with the user's answer. These ar
 Preserve details unaffected by the answer and recalculate item and meal totals. If the answer leaves a material uncertainty unresolved after research, return only the remaining concise questions in clarification.questions; otherwise omit clarification.
 ${HANDOFF_EVIDENCE}
 ${NUTRITION_SEARCH_POLICY}
+${PORTION_UNCERTAINTY_POLICY}
 Write all user-facing strings in ${language}. ${MEAL_RESULT_SHAPE}`;
 }
 
@@ -53,5 +56,6 @@ export function buildMealCorrectionPrompt(language: 'English' | 'Russian'): stri
 The correction overrides earlier inference. Preserve unaffected details, recalculate every affected item and total, and do not ask a follow-up question. Research missing nutrition when useful, but do not replace explicit user-supplied values with a different online variant.
 ${HANDOFF_EVIDENCE}
 ${NUTRITION_SEARCH_POLICY}
+${PORTION_UNCERTAINTY_POLICY}
 Write all user-facing strings in ${language}. ${MEAL_RESULT_SHAPE}`;
 }
