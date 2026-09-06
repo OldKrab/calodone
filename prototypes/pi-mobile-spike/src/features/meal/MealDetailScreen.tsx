@@ -1,3 +1,5 @@
+import { QuestionAnswers } from '../../components/QuestionAnswers';
+import { mealQuestionChoices } from '../../domain/mealQuestions';
 import { Ionicons } from '@expo/vector-icons';
 import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
@@ -50,7 +52,6 @@ export function MealDetailScreen(props: {
   const [error, setError] = useState('');
   const [draft, setDraft] = useState<MealAnalysis | undefined>(props.meal.analysis);
   const [time, setTime] = useState(editableTime(props.meal.capturedAt));
-  const [clarificationAnswer, setClarificationAnswer] = useState('');
   const [answering, setAnswering] = useState(false);
 
   useEffect(() => {
@@ -80,15 +81,12 @@ export function MealDetailScreen(props: {
     }
   };
 
-  const submitClarification = async () => {
-    if (!clarificationAnswer.trim() || answering) return;
+  const submitClarification = async (answer: string) => {
+    if (!answer.trim() || answering || props.answerSubmitting) return;
     setAnswering(true);
     setError('');
     try {
-      await props.onAnswer(clarificationAnswer.trim());
-      setClarificationAnswer('');
-    } catch {
-      setError(t('notificationAnswerError'));
+      await props.onAnswer(answer.trim());
     } finally {
       setAnswering(false);
     }
@@ -136,29 +134,12 @@ export function MealDetailScreen(props: {
         >
 
         {(answering || props.answerSubmitting) && <Text accessibilityLiveRegion="polite" style={styles.clarificationActivity}>{activityLabel(props.activity)}</Text>}
-        {!editing && !answering && !props.answerSubmitting && mealQuestions(draft.clarification).length > 0 && (
+        {!editing && mealQuestions(draft.clarification).length > 0 && (
           <View style={styles.clarification}>
             <Text style={styles.clarificationLabel}>{t('clarificationTitle')}</Text>
-            {mealQuestions(draft.clarification).map((question, index, questions) => (
-              <Text key={`${question}-${index}`} style={styles.clarificationQuestion}>
-                {questions.length > 1 ? `${index + 1}. ` : ''}{question}
-              </Text>
-            ))}
-            <View style={styles.clarificationRow}>
-              <TextInput
-                editable={!answering}
-                onChangeText={setClarificationAnswer}
-                onSubmitEditing={submitClarification}
-                placeholder={t('answerPlaceholder')}
-                placeholderTextColor={color.muted}
-                returnKeyType="send"
-                style={styles.clarificationInput}
-                value={clarificationAnswer}
-              />
-              <Pressable accessibilityRole="button" accessibilityLabel={t('answer')} disabled={!clarificationAnswer.trim() || answering} onPress={submitClarification} style={({ pressed }) => [styles.correctionSend, (!clarificationAnswer.trim() || answering) && styles.disabled, pressed && styles.pressed]}>
-                {answering ? <ActivityIndicator color={color.surface} size="small" /> : <Ionicons name="arrow-up" color={color.surface} size={21} />}
-              </Pressable>
-            </View>
+            <QuestionAnswers key={`${props.meal.id}-${JSON.stringify(draft.clarification)}`}
+              questions={mealQuestionChoices(draft.clarification)} disabled={answering || props.answerSubmitting}
+              onSubmit={submitClarification} />
             <Pressable accessibilityRole="button" onPress={props.onAskAssistant} style={styles.answerInChat}>
               <Ionicons name="chatbox-ellipses-outline" size={17} color={color.action} />
               <Text style={styles.answerInChatText}>{t('answerInChat')}</Text>
@@ -557,9 +538,6 @@ const styles = StyleSheet.create({
   editWithAssistantHelp: { color: color.muted, fontSize: 12, lineHeight: 17, marginTop: 2 },
   clarification: { backgroundColor: color.attentionSoft, borderColor: color.line, borderRadius: radius.surface, borderStyle: 'solid', borderWidth: 1, marginBottom: space.md, padding: space.md },
   clarificationLabel: { color: color.pending, fontFamily: type.ticketBold, fontSize: 14, letterSpacing: 0.4 },
-  clarificationQuestion: { color: color.ink, fontSize: 15, fontWeight: '400', lineHeight: 22, marginTop: space.sm },
-  clarificationRow: { alignItems: 'center', flexDirection: 'row', gap: space.sm, marginTop: space.md },
-  clarificationInput: { backgroundColor: color.canvas, borderRadius: radius.control, color: color.ink, flex: 1, fontSize: 15, height: 50, paddingHorizontal: 14 },
   answerInChat: { alignItems: 'center', borderTopColor: color.line, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', gap: space.sm, marginTop: space.md, minHeight: 42, paddingTop: space.sm },
   answerInChatText: { color: color.action, flex: 1, fontFamily: type.ticketBold, fontSize: 14 },
   clarificationActivity: { color: color.muted, fontSize: 12, marginTop: space.sm },

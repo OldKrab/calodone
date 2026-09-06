@@ -51,3 +51,11 @@ test('answered questions remain in chat history while the answer is processing a
     assert.deepEqual(items.filter(item=>item.kind==='message').map(item=>item.message),[question,answer]);
   }
 });
+
+test('only the latest unresolved question has answer controls; older questions stay readable', () => {
+  const old={role:'mealQuestion',mealId:'m',questions:['How much?'],timestamp:1};
+  const latest={...old,timestamp:3,questions:['How much?','Which sauce?']};
+  const items=buildActivityFeed({messages:[old,latest] as any,actions:[],busy:false,pendingMealQuestions:{m:['Which sauce?']}});
+  assert.equal(items.length,2);
+  assert.deepEqual(items.map(item=>item.kind==='message'?item.activeQuestions:undefined),[[],['Which sauce?']]);
+});

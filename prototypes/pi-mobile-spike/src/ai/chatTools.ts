@@ -1,4 +1,5 @@
 import { mealConfirmation } from '../services/mealConfirmation';
+import { questionTool } from './questionTool';
 import type { AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
 import { Type } from '@earendil-works/pi-ai';
 import { Directory, File, Paths } from 'expo-file-system';
@@ -67,6 +68,7 @@ export function createCalDoneTools(input: {
   onDataChanged: () => Promise<void>;
 }): AgentTool[] {
   return [
+    questionTool,
     {
       name: 'search_meals',
       label: 'Search meals',

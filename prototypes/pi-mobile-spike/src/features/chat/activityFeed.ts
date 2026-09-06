@@ -1,12 +1,14 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ChatAction } from '../../domain/chat';
+import { normalizeQuestionChoices, type QuestionChoices } from '../../domain/questionChoices.ts';
 
 type ToolCall = Extract<Extract<AgentMessage, { role: 'assistant' }>['content'][number], { type: 'toolCall' }>;
 export type ToolStatus = 'preparing' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type ToolExecution = { status: ToolStatus; arguments: Record<string, unknown> };
 export type ActivityTool = { call: ToolCall; status: ToolStatus };
 export type ActivityFeedItem =
-  | { kind: 'message'; key: string; message: AgentMessage }
+  | { kind: 'message'; key: string; message: AgentMessage; activeQuestions?: string[] }
+  | { kind: 'question'; key: string; questions: QuestionChoices[]; active: boolean }
   | { kind: 'activity'; key: string; tools: ActivityTool[] }
   | { kind: 'action'; key: string; action: ChatAction };
 
@@ -28,6 +30,7 @@ export function buildActivityFeed(input: {
   if (input.streamingMessage && !messages.includes(input.streamingMessage)) messages.push(input.streamingMessage);
   const results = new Map(messages.flatMap(message => message.role === 'toolResult' ? [[message.toolCallId, message] as const] : []));
   const lastUser = messages.findLastIndex(message => message.role === 'chatUser' || message.role === 'user');
+  const latestQuestion = new Map(messages.flatMap((message, index) => message.role === 'mealQuestion' ? [[message.mealId, index] as const] : []));
   const feed: ActivityFeedItem[] = [];
   let group: Extract<ActivityFeedItem, { kind: 'activity' }> | undefined;
   const receipts = [...input.actions].sort((a, b) => a.createdAt - b.createdAt);
@@ -44,7 +47,11 @@ export function buildActivityFeed(input: {
       group = undefined;
       flushReceipts(message.timestamp);
       if (message.role === 'chatUser' || message.role === 'mealQuestion') {
-        feed.push({ kind: 'message', key, message });
+        const activeQuestions = message.role === 'mealQuestion'
+          ? latestQuestion.get(message.mealId) === index && !input.answeringMealIds?.has(message.mealId)
+            ? message.questions.filter(question => !input.pendingMealQuestions || input.pendingMealQuestions[message.mealId]?.includes(question)) : []
+          : undefined;
+        feed.push({ kind: 'message', key, message, activeQuestions });
       }
       continue;
     }
@@ -54,11 +61,20 @@ export function buildActivityFeed(input: {
         flushReceipts(message.timestamp);
         feed.push({ kind: 'message', key: `${key}-${blockIndex}`, message: { ...message, content: [block] } });
       } else if (block.type === 'toolCall') {
+        const result = results.get(block.id);
+        if (block.name === 'ask_question' && result && !result.isError) {
+          const questions = normalizeQuestionChoices((result.details as { questions?: unknown } | undefined)?.questions);
+          if (questions.length) {
+            group = undefined;
+            flushReceipts(message.timestamp);
+            feed.push({ kind: 'question', key: `question-${block.id}`, questions, active: index > lastUser && !input.busy });
+            continue;
+          }
+        }
         if (!group) {
           group = { kind: 'activity', key: `activity-${block.id}`, tools: [] };
           feed.push(group);
         }
-        const result = results.get(block.id);
         const execution = input.toolExecutions?.[block.id];
         const status = execution?.status === 'cancelled' ? 'cancelled' : result ? (result.isError ? 'failed' : 'completed') : execution?.status ?? (input.busy && index > lastUser ? 'preparing' : 'cancelled');
         group.tools.push({ call: { ...block, arguments: execution?.arguments ?? (status === 'preparing' ? {} : block.arguments) }, status });
