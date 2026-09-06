@@ -1,3 +1,4 @@
+import { MealProgress } from '../../components/MealProgress';
 import { buildActivityFeed, type ActivityTool } from './activityFeed';
 import { QuestionAnswers } from '../../components/QuestionAnswers';
 import { mealQuestionChoices } from '../../domain/mealQuestions';
@@ -328,10 +329,10 @@ export function AssistantScreen(props: {
                 : <ActionRow key={item.key} action={item.action} busy={undoing === item.action.id} onUndo={() => void undo(item.action.id)} />)
             )}
             {snapshot.providerActivities.map((activity) => <ProviderActivityRow key={activity.id} activity={activity} />)}
-            {snapshot.mealActivity && !snapshot.busy && <WorkingRow label={locale === 'ru' ? 'Уточняю приём пищи…' : 'Updating your meal…'} />}
+            {snapshot.mealActivity && <MealProgress mealId={props.selectedMeal?.id ?? props.thread.mealId} stage={snapshot.mealActivity} />}
             {snapshot.recovering && <WorkingRow label={locale === 'ru' ? 'Восстанавливаю соединение…' : 'Reconnecting…'} />}
-            {showWorking && !snapshot.recovering && (
-              <View style={styles.working}><ActivityIndicator color={color.action} size="small" /><Text style={styles.workingText}>{t('assistantWorking')}</Text></View>
+            {showWorking && !snapshot.recovering && !snapshot.mealActivity && (
+              <MealProgress label={t('assistantWorking')} />
             )}
             {props.selectedMeal?.error && !snapshot.mealActivity && !snapshot.busy && !snapshot.error &&
               <Text accessibilityRole="alert" style={styles.error}>{connectionErrorText(props.selectedMeal.error, locale)}</Text>}
@@ -566,19 +567,22 @@ function ToolActivityRow({ tool }: { tool: ActivityTool }) {
   const failed = tool.status === 'failed';
   const label = tool.status === 'preparing' ? (locale === 'ru' ? 'Подготавливаю действие…' : 'Preparing action…') : toolActivityLabel(tool.call.name, tool.call.arguments);
   const status = tool.status === 'cancelled' ? (locale === 'ru' ? 'Прервано' : 'Cancelled') : failed ? (locale === 'ru' ? 'Не выполнено' : 'Failed') : '';
-  return <View accessibilityLabel={`${label}${status ? `. ${status}` : ''}`} style={styles.toolActivity}>
-    {active ? <ActivityIndicator color={color.action} size="small" /> : <Ionicons name={failed ? 'alert-circle-outline' : tool.status === 'cancelled' ? 'remove-circle-outline' : 'checkmark'} size={16} color={failed ? color.error : color.muted} />}
-    <Text style={[styles.toolActivityText, failed && styles.toolActivityError]}>{label}{status ? ` · ${status}` : ''}</Text>
+  if (active) return <MealProgress label={label} />;
+  return <View>
+    <View accessibilityLabel={`${label}${status ? `. ${status}` : ''}`} style={styles.toolActivity}>
+      <Ionicons name={failed ? 'alert-circle-outline' : tool.status === 'cancelled' ? 'remove-circle-outline' : 'checkmark'} size={16} color={failed ? color.error : color.muted} />
+      <Text style={[styles.toolActivityText, failed && styles.toolActivityError]}>{label}{status ? ` · ${status}` : ''}</Text>
+    </View>
+    {failed && tool.error && <Text selectable style={styles.error}>{connectionErrorText(tool.error, locale)}</Text>}
   </View>;
 }
 
 function ProviderActivityRow(props: { activity: ProviderToolActivity }) {
   const failed = props.activity.status === 'error';
+  if (props.activity.status === 'active') return <MealProgress label={toolActivityLabel(props.activity.name, {})} />;
   return (
     <View accessibilityLabel={toolActivityLabel(props.activity.name, {})} style={styles.toolActivity}>
-      {props.activity.status === 'active'
-        ? <ActivityIndicator color={color.action} size="small" />
-        : <Ionicons name={failed ? 'alert-circle-outline' : 'checkmark'} size={16} color={failed ? color.error : color.muted} />}
+      <Ionicons name={failed ? 'alert-circle-outline' : 'checkmark'} size={16} color={failed ? color.error : color.muted} />
       <Text numberOfLines={2} style={[styles.toolActivityText, failed && styles.toolActivityError]}>
         {toolActivityLabel(props.activity.name, {})}
       </Text>

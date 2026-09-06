@@ -59,3 +59,12 @@ test('only the latest unresolved question has answer controls; older questions s
   assert.equal(items.length,2);
   assert.deepEqual(items.map(item=>item.kind==='message'?item.activeQuestions:undefined),[[],['Which sauce?']]);
 });
+
+test('failed tool exposes returned reason without exposing successful tool payloads', () => {
+  const items = feed([assistant([call('a'), call('b')]), {...result('a'),isError:true,content:[{type:'text',text:'Search could not be verified.'}]}, {...result('b'),content:[{type:'text',text:'Internal meal data'}]}]);
+  assert.equal(items[0].kind, 'activity');
+  if(items[0].kind === 'activity') {
+    assert.equal(items[0].tools[0].error, 'Search could not be verified.');
+    assert.equal(items[0].tools[1].error, undefined);
+  }
+});
