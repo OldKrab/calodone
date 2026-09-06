@@ -193,7 +193,7 @@ class CodexLoopbackModule : Module() {
   }
 
   private fun successPage(): String =
-    """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>CaloDone login</title></head><body><p>Login complete. Returning to CaloDone...</p><p><a href="$APP_RETURN_URI">Return to CaloDone</a></p><script>location.replace('$APP_RETURN_URI')</script></body></html>"""
+    """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>CalDone login</title></head><body><p>Login complete. Returning to CalDone...</p><p><a href="$APP_RETURN_URI">Return to CalDone</a></p><script>location.replace('$APP_RETURN_URI')</script></body></html>"""
 
   private fun complete(code: String) {
     val promise = synchronized(lock) {

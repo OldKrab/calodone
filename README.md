@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="prototypes/pi-mobile-spike/assets/calodone-fork-icon.png" width="104" alt="CaloDone bent-fork icon">
+  <img src="prototypes/pi-mobile-spike/assets/calodone-fork-icon.png" width="104" alt="CalDone bent-fork icon">
 </p>
 
-# CaloDone
+# CalDone
 
 A calm food diary for Android. Add a meal with photos or text, get an editable calorie and macro estimate, and clarify the details in conversation.
 
-**[Download CaloDone](https://github.com/OldKrab/calodone/releases/latest)** · [Release history](https://github.com/OldKrab/calodone/releases) · [Report an issue](https://github.com/OldKrab/calodone/issues)
+**[Download CalDone](https://github.com/OldKrab/calodone/releases/latest)** · [Release history](https://github.com/OldKrab/calodone/releases) · [Report an issue](https://github.com/OldKrab/calodone/issues)
 
 ## What you can do
 
@@ -25,7 +25,7 @@ A calm food diary for Android. Add a meal with photos or text, get an editable c
 2. Complete setup and connect your ChatGPT account through the browser. OpenAI Codex is the currently implemented AI provider.
 3. Tap **Add meal**, capture or choose a photo, or enter a meal without one. Review the estimate and answer any remaining questions.
 
-Install the official APK over an existing CaloDone installation to retain local data. Backups are available in **Settings → Data and privacy**.
+Previously named **CaloDone**. Install the official APK over an existing CaloDone or CalDone installation to retain local data. Backups are available in **Settings → Data and privacy**.
 
 ## Data and current limits
 
@@ -61,7 +61,7 @@ To build a local standalone arm64 APK with your Android SDK and JDK configured:
 bash scripts/build-android.sh
 ```
 
-The APK is written to `artifacts/calodone-<version>-arm64.apk` at the repository root. Local builds use the generated development signing key; builds made on another machine may not update an official installation. GitHub releases use the configured release signing key.
+The APK is written to `artifacts/caldone-<version>-arm64.apk` at the repository root. Local builds use the generated development signing key; builds made on another machine may not update an official installation. GitHub releases use the configured release signing key.
 
 ## Repository layout
 

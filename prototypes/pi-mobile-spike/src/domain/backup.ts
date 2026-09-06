@@ -54,7 +54,7 @@ export type BackupMergePlan = {
   skippedConversations: number;
 };
 
-/** Parses the current CaloDone backup contract before any local data is changed. */
+/** Parses the current CalDone backup contract before any local data is changed. */
 export function parseCaloDoneBackup(value: unknown): CaloDoneBackup {
   const root = record(value, 'backup');
   if (root.format !== BACKUP_FORMAT) throw new Error('Unsupported backup format');

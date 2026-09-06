@@ -5,7 +5,7 @@ import { locale } from '../i18n';
 const work = createWorkLease(async () => {
   if (Platform.OS !== 'android') return;
   const { Processing } = await import('../../modules/calodone-processing');
-  await Processing.start('CaloDone', locale === 'ru' ? 'Анализирую еду. Можно пользоваться другими приложениями.' : 'Analyzing your meal. You can use other apps.');
+  await Processing.start('CalDone', locale === 'ru' ? 'Анализирую еду. Можно пользоваться другими приложениями.' : 'Analyzing your meal. You can use other apps.');
 }, async () => {
   if (Platform.OS !== 'android') return;
   const { Processing } = await import('../../modules/calodone-processing');

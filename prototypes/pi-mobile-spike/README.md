@@ -1,13 +1,13 @@
-# CaloDone Android app
+# CalDone Android app
 
-This directory contains the production CaloDone Android app. Its name comes from the original Pi mobile compatibility spike. See the [root README](../../README.md) for the current release, installation, and contribution instructions.
+This directory contains the production CalDone Android app. Its name comes from the original Pi mobile compatibility spike. See the [root README](../../README.md) for the current release, installation, and contribution instructions.
 
 ## Current flow
 
 1. Connect a ChatGPT account through browser OAuth.
 2. Tap **Add meal** to open the camera directly. Gallery and **Describe meal** are secondary actions on the camera screen; manual nutrition entry is available from the description screen.
 3. Take or choose photos, or describe the meal in text, then start analysis.
-4. Return immediately to the Today screen while CaloDone recognizes the complete meal.
+4. Return immediately to the Today screen while CalDone recognizes the complete meal.
 5. Answer any remaining clarification questions if needed. Unanswered clarifications become **Estimated** after 24 hours.
 
 The Android home-screen widget opens directly into the camera. User-initiated meal analysis acquires an Android foreground service with a quiet notification and a bounded wake lock, allowing processing while other apps are open. WorkManager provides durable recovery after interruption, and returning to the app revisits delayed retries. Requests have a deadline and failures use bounded retries.

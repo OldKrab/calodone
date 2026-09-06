@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "CaloDone",
+    "name": "CalDone",
     "slug": "calodone",
     "scheme": "calodone",
-    "version": "1.1.6",
+    "version": "1.1.7",
     "backgroundColor": "#F5F8F6",
     "orientation": "portrait",
     "icon": "./assets/calodone-fork-icon.png",
@@ -12,7 +12,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "dev.calodone.pi-mobile-spike",
       "infoPlist": {
-        "NSCameraUsageDescription": "CaloDone uses the camera to photograph meals without saving them to your gallery."
+        "NSCameraUsageDescription": "CalDone uses the camera to photograph meals without saving them to your gallery."
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -20,7 +20,7 @@
     },
     "android": {
       "package": "dev.calodone.pimobilespike",
-      "versionCode": 11,
+      "versionCode": 12,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#176B4D",
@@ -42,14 +42,14 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "CaloDone uses the camera to photograph meals without saving them to your gallery.",
+          "cameraPermission": "CalDone uses the camera to photograph meals without saving them to your gallery.",
           "recordAudioAndroid": false
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "CaloDone lets you choose existing meal photos for analysis."
+          "photosPermission": "CalDone lets you choose existing meal photos for analysis."
         }
       ],
       "expo-notifications",
@@ -60,8 +60,8 @@
       [
         "expo-media-library",
         {
-          "photosPermission": "CaloDone needs photo access only when you save or share a meal photo.",
-          "savePhotosPermission": "CaloDone saves a meal photo only after you choose Save to device.",
+          "photosPermission": "CalDone needs photo access only when you save or share a meal photo.",
+          "savePhotosPermission": "CalDone saves a meal photo only after you choose Save to device.",
           "granularPermissions": [
             "photo"
           ]

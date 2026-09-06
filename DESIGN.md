@@ -1,5 +1,5 @@
 ---
-name: CaloDone
+name: CalDone
 description: Native Android meal journal.
 colors:
   canvas: "#F5F8F6"
@@ -62,7 +62,7 @@ components:
     rounded: "{rounded.control}"
 ---
 
-# Design System: CaloDone
+# Design System: CalDone
 
 ## Overview
 
@@ -70,7 +70,7 @@ components:
 
 A precise everyday instrument with the clarity of a daily journal: compact nutrition readings, readable meal rows, and a dedicated photo action. Mineral white, deep green ink, emerald actions, and soft sage selections provide a shared visual language across logging, editing, setup, settings, and Assistant.
 
-This document describes the native Android implementation in `prototypes/pi-mobile-spike`. The user approved the experiment's design for the original CaloDone app: version 1.1.0 (version code 5), package `dev.calodone.pimobilespike`, scheme `calodone`. It supersedes the former kitchen-ticket visual system. It does not describe a website redesign. `PRODUCT.md` owns product behavior and domain truth.
+This document describes the native Android implementation in `prototypes/pi-mobile-spike`. The user approved the experiment's design for the original CalDone app: version 1.1.0 (version code 5), package `dev.calodone.pimobilespike`, scheme `calodone`. It supersedes the former kitchen-ticket visual system. It does not describe a website redesign. `PRODUCT.md` owns product behavior and domain truth.
 
 Source of truth: `src/design/tokens.ts`, `App.tsx`, shared components, and feature screens within that prototype. The frontmatter records native values: layout dimensions are dp, text sizes are sp, represented by React Native numeric styles. These are not CSS requirements. Typography entries describe observed roles, not a centralized complete type scale.
 
