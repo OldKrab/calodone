@@ -21,8 +21,8 @@ export type ChatMealQuestionMessage = {
 
 declare module '@earendil-works/pi-agent-core' {
   interface CustomAgentMessages {
-    calodoneUser: ChatUserMessage;
-    calodoneMealQuestion: ChatMealQuestionMessage;
+    caldoneUser: ChatUserMessage;
+    caldoneMealQuestion: ChatMealQuestionMessage;
   }
 }
 

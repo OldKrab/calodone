@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, parseCaloDoneBackup, planBackupMerge, summarizeBackup } from './backup.ts';
+import { BACKUP_FORMAT, BACKUP_SCHEMA_VERSION, parseCalDoneBackup, planBackupMerge, summarizeBackup } from './backup.ts';
 
 const meal = {
   id: 'meal-1', revision: 2, capturedAt: 1_700_000_000_000, status: 'complete', note: '',
@@ -13,7 +13,7 @@ const meal = {
 };
 
 test('parses the current versioned CalDone backup format', () => {
-  const backup = parseCaloDoneBackup({
+  const backup = parseCalDoneBackup({
     format: BACKUP_FORMAT,
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: '2026-09-04T10:00:00.000Z',
@@ -28,7 +28,7 @@ test('parses the current versioned CalDone backup format', () => {
 });
 
 test('summarizes restorable meal and chat photos before import', () => {
-  const backup = parseCaloDoneBackup({
+  const backup = parseCalDoneBackup({
     format: BACKUP_FORMAT,
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: '2026-09-04T10:00:00.000Z',
@@ -45,7 +45,7 @@ test('summarizes restorable meal and chat photos before import', () => {
 });
 
 test('preserves meal-analysis questions embedded in conversation history', () => {
-  const backup = parseCaloDoneBackup({
+  const backup = parseCalDoneBackup({
     format: BACKUP_FORMAT,
     schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: '2026-09-04T10:00:00.000Z',
@@ -64,12 +64,12 @@ test('preserves meal-analysis questions embedded in conversation history', () =>
 });
 
 test('rejects unrelated or malformed JSON before import', () => {
-  assert.throws(() => parseCaloDoneBackup({ format: BACKUP_FORMAT, schemaVersion: BACKUP_SCHEMA_VERSION, exportedAt: 'today', preferences: {}, meals: [{ id: 'broken' }] }), /Invalid/);
-  assert.throws(() => parseCaloDoneBackup({ format: 'other-app', schemaVersion: 1, exportedAt: 'today', preferences: {}, meals: [] }), /Unsupported backup format/);
+  assert.throws(() => parseCalDoneBackup({ format: BACKUP_FORMAT, schemaVersion: BACKUP_SCHEMA_VERSION, exportedAt: 'today', preferences: {}, meals: [{ id: 'broken' }] }), /Invalid/);
+  assert.throws(() => parseCalDoneBackup({ format: 'other-app', schemaVersion: 1, exportedAt: 'today', preferences: {}, meals: [] }), /Unsupported backup format/);
 });
 
 test('merge planning never overwrites meals or conversations already on the device', () => {
-  const backup = parseCaloDoneBackup({
+  const backup = parseCalDoneBackup({
     format: BACKUP_FORMAT, schemaVersion: BACKUP_SCHEMA_VERSION,
     exportedAt: '2026-09-04T10:00:00.000Z', preferences: {}, meals: [meal],
     conversations: [{ thread: { id: 'chat-1', title: '', createdAt: 1, updatedAt: 1 }, messages: [], actions: [] }],
@@ -81,4 +81,22 @@ test('merge planning never overwrites meals or conversations already on the devi
   assert.deepEqual(plan.conversations, []);
   assert.equal(plan.skippedMeals, 1);
   assert.equal(plan.skippedConversations, 1);
+});
+
+test('imports a pre-rename backup including meal and conversation photos', () => {
+  const backup = parseCalDoneBackup({
+    format: 'calodone-backup', schemaVersion: 1,
+    exportedAt: '2026-09-05T10:00:00.000Z',
+    preferences: { goals: { calories: 2280 }, locale: 'ru' },
+    meals: [meal],
+    conversations: [{
+      thread: { id: 'old-chat', title: 'Soup', createdAt: 1, updatedAt: 2 },
+      messages: [{ role: 'chatUser', text: 'Photo', timestamp: 2, attachments: [{ mimeType: 'image/png', base64: 'ZGVm' }] }],
+      actions: [],
+    }],
+  });
+  assert.equal(backup.format, 'caldone-backup');
+  assert.equal(backup.meals[0].photos[0].base64, 'YWJj');
+  assert.deepEqual(summarizeBackup(backup), { meals: 1, conversations: 1, photos: 2 });
+  assert.equal(backup.preferences.goals?.calories, 2280);
 });

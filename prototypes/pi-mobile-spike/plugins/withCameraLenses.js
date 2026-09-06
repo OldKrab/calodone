@@ -6,12 +6,12 @@ const path = require('node:path');
 // Keep this Android adapter local and version-checked; never silently apply it
 // to a changed upstream implementation. Only CameraX-exposed lenses are offered.
 function replaceRequired(source, before, after) {
-  if (!source.includes(before)) throw new Error('CaloDone camera adapter: upstream source changed; review the patch');
+  if (!source.includes(before)) throw new Error('CalDone camera adapter: upstream source changed; review the patch');
   return source.replace(before, after);
 }
 function patchView(source) {
-  if (source.includes('// CaloDone Android lens adapter')) return source;
-  source = replaceRequired(source, '  var zoom: Float = 0f', `  // CaloDone Android lens adapter
+  if (source.includes('// CalDone Android lens adapter')) return source;
+  source = replaceRequired(source, '  var zoom: Float = 0f', `  // CalDone Android lens adapter
   var selectedLens: String? = null
     set(value) {
       if (field != value) {
@@ -57,8 +57,8 @@ function patchView(source) {
   return source;
 }
 function patchModule(source) {
-  if (source.includes('// CaloDone Android lens adapter')) return source;
-  return replaceRequired(source, '      Prop("zoom")', `      // CaloDone Android lens adapter
+  if (source.includes('// CalDone Android lens adapter')) return source;
+  return replaceRequired(source, '      Prop("zoom")', `      // CalDone Android lens adapter
       Prop("selectedLens") { view, lens: String? -> view.selectedLens = lens }
       AsyncFunction("getAvailableLenses") { view: ExpoCameraView -> view.getAvailableLenses() }.runOnQueue(Queues.MAIN)
 

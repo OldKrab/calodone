@@ -1,6 +1,6 @@
 import { openDatabaseSync, type SQLiteDatabase } from 'expo-sqlite';
 
-const connection = openDatabaseSync('calodone.db');
+const connection = openDatabaseSync('caldone.db');
 let pending: Promise<unknown> = Promise.resolve();
 
 function enqueue<T>(operation: () => Promise<T>): Promise<T> {

@@ -1,4 +1,4 @@
-# CaloDone project rules
+# CalDone project rules
 
 ## App-owned dialogs
 

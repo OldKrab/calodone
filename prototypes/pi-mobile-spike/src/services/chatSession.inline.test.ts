@@ -25,7 +25,7 @@ const sources: Record<string, string> = {
         }
       }, async continue(){globalThis.__inlineFixture.continued=[...this.state.messages]; this.state.errorMessage=undefined;}};
   } export const getThinkingLevel=async()=>null; export const getWebSearchEnabled=async()=>false;`,
-  '../ai/chatTools': 'export const createCaloDoneTools=()=>[];',
+  '../ai/chatTools': 'export const createCalDoneTools=()=>[];',
   '../ai/chatPrompt': 'export const buildChatPrompt=()=>""; export const CHAT_PROMPT_VERSION="test";',
   '../data/chatRepository': `export const loadChatMessages=async()=>[...globalThis.__inlineFixture.messages];
     export const listChatActions=async()=>[]; export const sanitizeChatMessage=x=>x;

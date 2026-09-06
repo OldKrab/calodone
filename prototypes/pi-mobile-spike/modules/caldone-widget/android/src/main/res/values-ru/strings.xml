@@ -1,0 +1,5 @@
+<resources>
+  <string name="caldone_widget_label">CalDone</string>
+  <string name="caldone_widget_description">Открыть камеру для еды</string>
+  <string name="caldone_widget_action">Добавить</string>
+</resources>

@@ -127,7 +127,7 @@ function SettingsHub(props: Parameters<typeof SettingsScreen>[0] & {
       <SettingsSection title={t('appSection')}>
         <SettingsLink label={t('language')} value={props.locale === 'ru' ? 'Русский' : 'English'} onPress={() => props.onOpen('language')} />
         <SettingsLink label={t('dataPrivacy')} value={t('photosKeptWithMeals')} onPress={() => props.onOpen('privacy')} />
-        <SettingsLink label={t('aboutCalodone')} value={t('versionLabel', { version: '1.1.7' })} onPress={() => props.onOpen('about')} />
+        <SettingsLink label={t('aboutCaldone')} value={t('versionLabel', { version: '1.2.0' })} onPress={() => props.onOpen('about')} />
       </SettingsSection>
     </ScrollView>
   );
@@ -333,12 +333,12 @@ function PrivacyPage(props: { includePhotos: boolean; importing: boolean; onBack
 function AboutPage(props: { onBack: () => void }) {
   return (
     <ScrollView contentContainerStyle={styles.content}>
-      <SettingsHeader title={t('aboutCalodone')} onBack={props.onBack} />
-      <Image source={require('../../../assets/calodone-fork-icon.png')} style={styles.aboutMark} />
+      <SettingsHeader title={t('aboutCaldone')} onBack={props.onBack} />
+      <Image source={require('../../../assets/caldone-fork-icon.png')} style={styles.aboutMark} />
       <Text style={styles.aboutTitle}>CalDone</Text>
       <Text style={styles.aboutCopy}>{t('aboutBody')}</Text>
       <View style={styles.formPanel}>
-        <InfoRow label={t('version')} value="1.1.7" />
+        <InfoRow label={t('version')} value="1.2.0" />
         <InfoRow label={t('openSource')} value="CalDone" />
         <InfoRow label={locale === 'ru' ? 'Лицензия' : 'License'} value="MIT" />
       </View>

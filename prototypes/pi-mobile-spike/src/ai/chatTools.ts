@@ -59,7 +59,7 @@ const mealStatusSchema = Type.Union([
   Type.Literal('complete'), Type.Literal('estimated'), Type.Literal('failed'),
 ]);
 
-export function createCaloDoneTools(input: {
+export function createCalDoneTools(input: {
   threadId: string;
   getMessages: () => AgentMessage[];
   attachments: Map<string, ChatAttachment>;

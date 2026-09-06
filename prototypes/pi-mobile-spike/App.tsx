@@ -52,7 +52,7 @@ import {
   preferredMealThread,
   syncMealQuestionsToThread,
 } from './src/data/chatRepository';
-import { mergeCaloDoneBackup } from './src/data/backupRepository';
+import { mergeCalDoneBackup } from './src/data/backupRepository';
 import { color, type } from './src/design/tokens';
 import { AppDialogProvider, useAppDialog } from './src/components/AppDialog';
 import { mealQuestions, type DailyGoals, type Meal, type MealAnalysis, type MealPhoto } from './src/domain/meal';
@@ -63,7 +63,7 @@ import {
   BACKUP_FORMAT,
   BACKUP_SCHEMA_VERSION,
   MAX_BACKUP_BYTES,
-  parseCaloDoneBackup,
+  parseCalDoneBackup,
   summarizeBackup,
 } from './src/domain/backup';
 import {
@@ -99,13 +99,13 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <AppDialogProvider>
-        <CaloDoneApp />
+        <CalDoneApp />
       </AppDialogProvider>
     </SafeAreaProvider>
   );
 }
 
-function CaloDoneApp() {
+function CalDoneApp() {
   const dialog = useAppDialog();
   const insets = useSafeAreaInsets();
   const [ready, setReady] = useState(false);
@@ -192,7 +192,7 @@ function CaloDoneApp() {
       if (!url) return;
       try {
         const parsed = new URL(url);
-        if (parsed.protocol === 'calodone:' && parsed.hostname === 'capture') setScreen('camera');
+        if (parsed.protocol === 'caldone:' && parsed.hostname === 'capture') setScreen('camera');
       } catch {
         // Ignore unrelated or malformed deep links.
       }
@@ -261,7 +261,7 @@ function CaloDoneApp() {
       setNotificationPreferences(nextNotifications);
       setIncludePhotosInExport(storedExportPhotos !== 'false');
       if (storedLocale === 'en' || storedLocale === 'ru') setLocale(storedLocale);
-      const setupComplete = (await SecureStore.getItemAsync('calodone.setup.v2.complete')) === 'true';
+      const setupComplete = (await SecureStore.getItemAsync('caldone.setup.v2.complete')) === 'true';
       setShowSetup(!setupComplete);
       const signedIn = await isSignedIn();
       setAuthenticated(signedIn);
@@ -505,7 +505,7 @@ function CaloDoneApp() {
       setGoals(nextGoals);
       setAuthenticated(true);
       setShowSetup(false);
-      await SecureStore.setItemAsync('calodone.setup.v2.complete', 'true');
+      await SecureStore.setItemAsync('caldone.setup.v2.complete', 'true');
       await applyNotificationPreferences(notificationPreferences, false);
       await processPendingMeals();
       await refresh();
@@ -577,7 +577,7 @@ function CaloDoneApp() {
         showInfo(t('importFailedTitle'), t('importTooLarge'));
         return;
       }
-      const backup = parseCaloDoneBackup(await selection.result.json());
+      const backup = parseCalDoneBackup(await selection.result.json());
       const summary = summarizeBackup(backup);
       dialog.show({
         title: t('importPreviewTitle'),
@@ -592,10 +592,10 @@ function CaloDoneApp() {
     }
   };
 
-  const performImport = async (backup: ReturnType<typeof parseCaloDoneBackup>) => {
+  const performImport = async (backup: ReturnType<typeof parseCalDoneBackup>) => {
     setImportingData(true);
     try {
-      const result = await mergeCaloDoneBackup(backup);
+      const result = await mergeCalDoneBackup(backup);
       if (backup.preferences.units) setUnits(backup.preferences.units);
       if (backup.preferences.notifications) setNotificationPreferences(backup.preferences.notifications);
       if (backup.preferences.locale) {
@@ -639,7 +639,7 @@ function CaloDoneApp() {
       file.write(JSON.stringify({
         exportedAt: new Date().toISOString(),
         processing: { foregroundServiceActive: foregroundWorkActive(), meals: (await listMeals()).map(meal => ({ status: meal.status, capturedAt: meal.capturedAt, error: meal.error })) },
-        app: { version: '1.1.7', platform: Platform.OS, platformVersion: Platform.Version },
+        app: { version: '1.2.0', platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
           if (event.operation === 'layout' || event.operation === 'lifecycle' || event.operation === 'camera' || event.operation === 'web_search') return event;

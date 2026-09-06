@@ -43,10 +43,10 @@ import type { ChatMealQuestionMessage, ChatUserMessage } from '../domain/chat';
 import { webSearchPreference } from './providerPreferences';
 
 const PROVIDER_ID = 'openai-codex';
-const SELECTED_PROVIDER_KEY = 'calodone.ai.selected-provider';
-const SELECTED_MODEL_KEY_PREFIX = 'calodone.ai.selected-model.';
-const WEB_SEARCH_KEY_PREFIX = 'calodone.ai.web-search.';
-const THINKING_LEVEL_KEY_PREFIX = 'calodone.ai.thinking-level.';
+const SELECTED_PROVIDER_KEY = 'caldone.ai.selected-provider';
+const SELECTED_MODEL_KEY_PREFIX = 'caldone.ai.selected-model.';
+const WEB_SEARCH_KEY_PREFIX = 'caldone.ai.web-search.';
+const THINKING_LEVEL_KEY_PREFIX = 'caldone.ai.thinking-level.';
 const PREFERRED_IMAGE_MODELS = [
   'gpt-5.6-luna',
   'gpt-5.4-mini',

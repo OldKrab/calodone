@@ -128,7 +128,7 @@ export function SetupScreen(props: {
             showsVerticalScrollIndicator={false}
           >
             <View style={styles.brandRow}>
-              <Image source={require('../../../assets/calodone-fork-icon.png')} style={{ width: 36, height: 36, borderRadius: 10 }} />
+              <Image source={require('../../../assets/caldone-fork-icon.png')} style={{ width: 36, height: 36, borderRadius: 10 }} />
               <Text style={styles.brand}>CalDone</Text>
             </View>
             <Text style={styles.welcomeTitle}>

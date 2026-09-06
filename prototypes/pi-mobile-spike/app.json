@@ -1,16 +1,16 @@
 {
   "expo": {
     "name": "CalDone",
-    "slug": "calodone",
-    "scheme": "calodone",
-    "version": "1.1.7",
+    "slug": "caldone",
+    "scheme": "caldone",
+    "version": "1.2.0",
     "backgroundColor": "#F5F8F6",
     "orientation": "portrait",
-    "icon": "./assets/calodone-fork-icon.png",
+    "icon": "./assets/caldone-fork-icon.png",
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "dev.calodone.pi-mobile-spike",
+      "bundleIdentifier": "dev.caldone.app",
       "infoPlist": {
         "NSCameraUsageDescription": "CalDone uses the camera to photograph meals without saving them to your gallery."
       },
@@ -19,15 +19,15 @@
       }
     },
     "android": {
-      "package": "dev.calodone.pimobilespike",
-      "versionCode": 12,
+      "package": "dev.caldone.app",
+      "versionCode": 13,
       "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
         "backgroundColor": "#176B4D",
-        "foregroundImage": "./assets/calodone-fork-icon.png"
+        "foregroundImage": "./assets/caldone-fork-icon.png"
       },
       "predictiveBackGestureEnabled": false,
-      "icon": "./assets/calodone-fork-icon.png"
+      "icon": "./assets/caldone-fork-icon.png"
     },
     "androidNavigationBar": {
       "backgroundColor": "#F5F8F6",
@@ -35,7 +35,7 @@
       "enforceContrast": false
     },
     "web": {
-      "favicon": "./assets/calodone-fork-icon.png"
+      "favicon": "./assets/caldone-fork-icon.png"
     },
     "plugins": [
       "expo-secure-store",

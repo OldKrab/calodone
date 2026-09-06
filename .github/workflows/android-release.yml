@@ -62,7 +62,7 @@ jobs:
             echo "ANDROID_KEYSTORE_BASE64 is not configured" >&2
             exit 1
           fi
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/calodone-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/caldone-release.keystore"
 
       - name: Build signed ARM64 APK
         env:
@@ -76,7 +76,7 @@ jobs:
           fi
           ./android/gradlew -p android assembleRelease \
             -PreactNativeArchitectures=arm64-v8a \
-            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/calodone-release.keystore" \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/caldone-release.keystore" \
             -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
@@ -101,6 +101,16 @@ jobs:
             echo "Unexpected signing certificate: $signer" >&2
             exit 1
           fi
+
+          # Validate the manifest of the built artifact, not only Expo source config.
+          aapt="$(dirname "$apksigner")/aapt"
+          actual_package=$("$aapt" dump badging "$artifact" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
+          expected_package=$(node -p "require('./app.json').expo.android.package")
+          if [ "$actual_package" != "$expected_package" ]; then
+            echo "Unexpected application ID: $actual_package" >&2
+            exit 1
+          fi
+          echo "Verified application ID: $actual_package"
 
           abi=$(unzip -Z1 "$artifact" | awk -F/ '/^lib\// { print $2 }' | sort -u)
           if [ "$abi" != "arm64-v8a" ]; then
