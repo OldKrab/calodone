@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="prototypes/pi-mobile-spike/assets/calodone-fork-icon.png" width="104" alt="CalDone bent-fork icon">
+  <img src="prototypes/pi-mobile-spike/assets/caldone-fork-icon.png" width="104" alt="CalDone bent-fork icon">
 </p>
 
 # CalDone
 
 A calm food diary for Android. Add a meal with photos or text, get an editable calorie and macro estimate, and clarify the details in conversation.
 
-**[Download CalDone](https://github.com/OldKrab/calodone/releases/latest)** · [Release history](https://github.com/OldKrab/calodone/releases) · [Report an issue](https://github.com/OldKrab/calodone/issues)
+**[Download CalDone](https://github.com/OldKrab/caldone/releases/latest)** · [Release history](https://github.com/OldKrab/caldone/releases) · [Report an issue](https://github.com/OldKrab/caldone/issues)
 
 ## What you can do
 
@@ -21,11 +21,11 @@ A calm food diary for Android. Add a meal with photos or text, get an editable c
 
 ## Install and get started
 
-1. Download the **arm64 APK** from [GitHub Releases](https://github.com/OldKrab/calodone/releases/latest) and install it on a compatible Android phone. Android may ask you to allow installation from your browser or file manager.
+1. Download the **arm64 APK** from [GitHub Releases](https://github.com/OldKrab/caldone/releases/latest) and install it on a compatible Android phone. Android may ask you to allow installation from your browser or file manager.
 2. Complete setup and connect your ChatGPT account through the browser. OpenAI Codex is the currently implemented AI provider.
 3. Tap **Add meal**, capture or choose a photo, or enter a meal without one. Review the estimate and answer any remaining questions.
 
-Previously named **CaloDone**. Install the official APK over an existing CaloDone or CalDone installation to retain local data. Backups are available in **Settings → Data and privacy**.
+Install the official APK over an existing installation to retain local data. Backups are available in **Settings → Data and privacy**.
 
 ## Data and current limits
 

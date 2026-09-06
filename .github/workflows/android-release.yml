@@ -62,7 +62,7 @@ jobs:
             echo "ANDROID_KEYSTORE_BASE64 is not configured" >&2
             exit 1
           fi
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/calodone-release.keystore"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/caldone-release.keystore"
 
       - name: Build signed ARM64 APK
         env:
@@ -76,7 +76,7 @@ jobs:
           fi
           ./android/gradlew -p android assembleRelease \
             -PreactNativeArchitectures=arm64-v8a \
-            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/calodone-release.keystore" \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/caldone-release.keystore" \
             -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"

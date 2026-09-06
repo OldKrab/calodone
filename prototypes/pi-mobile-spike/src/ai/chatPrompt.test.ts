@@ -15,7 +15,7 @@ test('chat prompt separates discussion from authorized changes', () => {
   assert.match(prompt, /statusText/);
   assert.match(prompt, /reanalyze_meal/);
   assert.match(prompt, /summarize_nutrition/);
-  assert.match(CHAT_PROMPT_VERSION, /^calodone-assistant-v\d+$/);
+  assert.match(CHAT_PROMPT_VERSION, /^caldone-assistant-v\d+$/);
 });
 
 test('chat prompt carries selected meal context and all pending questions', () => {

@@ -1,6 +1,6 @@
 import { NUTRITION_SEARCH_POLICY } from './nutritionSearchPolicy.ts';
 
-export const CHAT_PROMPT_VERSION = 'calodone-assistant-v6';
+export const CHAT_PROMPT_VERSION = 'caldone-assistant-v6';
 
 export function buildChatPrompt(input: {
   language: 'English' | 'Russian';

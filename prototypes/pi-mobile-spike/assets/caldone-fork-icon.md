@@ -1,6 +1,6 @@
 # CalDone fork icon
 
-The user selected this bent-fork mark for the app. The continuous fork/check silhouette represents food logging completed with little effort. Use `calodone-fork-icon.png` unchanged for the launcher, welcome screen, and About screen.
+The user selected this bent-fork mark for the app. The continuous fork/check silhouette represents food logging completed with little effort. Use `caldone-fork-icon.png` unchanged for the launcher, welcome screen, and About screen.
 
 Generated using OpenAI image generation, then edited to preserve the silhouette on an opaque emerald background with mineral-white foreground. The Android config plugin adds a 12% drawable inset for adaptive masks without modifying the source raster.
 

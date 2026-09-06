@@ -77,7 +77,7 @@ export async function checkPiMobileRuntime(): Promise<RuntimeCheck[]> {
   try {
     const digest = await crypto.subtle.digest(
       'SHA-256',
-      new TextEncoder().encode('calodone'),
+      new TextEncoder().encode('caldone'),
     );
     record('crypto.subtle.digest', digest.byteLength === 32, `${digest.byteLength} bytes`);
   } catch (error) {

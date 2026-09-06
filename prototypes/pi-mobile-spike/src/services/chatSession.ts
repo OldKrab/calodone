@@ -6,7 +6,7 @@ import { File } from 'expo-file-system';
 
 import { createChatAgent, getThinkingLevel, getWebSearchEnabled } from '../ai/piClient';
 import type { ProviderToolActivity } from '../ai/providerActivity';
-import { createCaloDoneTools } from '../ai/chatTools';
+import { createCalDoneTools } from '../ai/chatTools';
 import { buildChatPrompt, CHAT_PROMPT_VERSION } from '../ai/chatPrompt';
 import {
   getChatAction,
@@ -192,7 +192,7 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
       providerActivities.set(activity.id, activity);
       emit();
     },
-    tools: createCaloDoneTools({
+    tools: createCalDoneTools({
       threadId: input.thread.id,
       attachments: attachmentMap,
       onDataChanged: input.onDataChanged,

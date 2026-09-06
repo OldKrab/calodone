@@ -2,7 +2,7 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { Directory, File, Paths } from 'expo-file-system';
 import { database, transaction } from './database';
 
-import type { BackupConversation, BackupMessage, BackupPhoto, CaloDoneBackup } from '../domain/backup';
+import type { BackupConversation, BackupMessage, BackupPhoto, CalDoneBackup } from '../domain/backup';
 import { planBackupMerge } from '../domain/backup';
 import type { Meal, MealPhoto } from '../domain/meal';
 import { sanitizeChatMessage } from './chatRepository';
@@ -21,7 +21,7 @@ export type BackupImportResult = {
  * Preferences are restored only when present in the backup; provider credentials
  * and diagnostics are intentionally outside the backup contract.
  */
-export async function mergeCaloDoneBackup(backup: CaloDoneBackup): Promise<BackupImportResult> {
+export async function mergeCalDoneBackup(backup: CalDoneBackup): Promise<BackupImportResult> {
   const [mealRows, threadRows] = await Promise.all([
     database.getAllAsync<{ id: string }>('SELECT id FROM meals'),
     database.getAllAsync<{ id: string }>('SELECT id FROM chat_threads'),
@@ -132,7 +132,7 @@ export async function mergeCaloDoneBackup(backup: CaloDoneBackup): Promise<Backu
   }
 }
 
-async function restorePreferences(database: typeof import('./database').database, backup: CaloDoneBackup): Promise<void> {
+async function restorePreferences(database: typeof import('./database').database, backup: CalDoneBackup): Promise<void> {
   const preferences = backup.preferences;
   const values: Array<[string, string]> = [];
   if (preferences.goals) values.push(['daily_goals', JSON.stringify(preferences.goals)]);

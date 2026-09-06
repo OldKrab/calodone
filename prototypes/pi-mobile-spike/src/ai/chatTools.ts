@@ -57,7 +57,7 @@ const mealStatusSchema = Type.Union([
   Type.Literal('complete'), Type.Literal('estimated'), Type.Literal('failed'),
 ]);
 
-export function createCaloDoneTools(input: {
+export function createCalDoneTools(input: {
   threadId: string;
   attachments: Map<string, ChatAttachment>;
   onDataChanged: () => Promise<void>;
