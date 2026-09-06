@@ -1,4 +1,7 @@
 import { buildActivityFeed, type ActivityTool } from './activityFeed';
+import { QuestionAnswers } from '../../components/QuestionAnswers';
+import { mealQuestionChoices } from '../../domain/mealQuestions';
+import type { QuestionChoices } from '../../domain/questionChoices';
 import { connectionErrorText } from '../../services/connectionRecovery';
 import { Ionicons } from '@expo/vector-icons';
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
@@ -164,6 +167,7 @@ export function AssistantScreen(props: {
     answeringMealIds: props.answeringMealIds,
     pendingMealQuestions: Object.fromEntries(props.meals.map(meal => [meal.id, mealQuestions(meal.analysis?.clarification)])),
   }), [snapshot, props.meals, props.answeringMealIds]);
+  const mealChoicesById = useMemo(() => new Map(props.meals.map(meal => [meal.id, mealQuestionChoices(meal.analysis?.clarification)])), [props.meals]);
   const toolResults = useMemo(() => {
     const results = new Map<string, Extract<AgentMessage, { role: 'toolResult' }>>();
     for (const message of snapshot.messages) {
@@ -196,6 +200,12 @@ export function AssistantScreen(props: {
       setAttachments(sentAttachments);
       unsentAttachments.current = sentAttachments;
     }
+  };
+
+  // Button answers are separate messages; preserve any unsent composer text and photos.
+  const sendAnswer = async (answer: string) => {
+    if (!session) throw new Error('Session unavailable');
+    await session.send(answer, []);
   };
 
   const addImages = async (source: 'camera' | 'library') => {
@@ -306,7 +316,13 @@ export function AssistantScreen(props: {
               <EmptyAssistant selectedMeal={Boolean(props.selectedMeal)} onSuggestion={(value) => void send(value)} />
             ) : (
               feed.map((item) => item.kind === 'message'
-                ? <MessageRow key={item.key} message={item.message} />
+                ? <MessageRow key={item.key} message={item.message}
+                    choices={item.message.role === 'mealQuestion' ? mealChoicesById.get(item.message.mealId) : undefined}
+                    disabled={!session || snapshot.busy || Boolean(snapshot.mealActivity)}
+                    onAnswer={sendAnswer} />
+                : item.kind === 'question' ? <QuestionAnswers key={item.key} questions={item.questions}
+                    disabled={!item.active || !session || Boolean(snapshot.mealActivity)}
+                    onSubmit={sendAnswer} />
                 : item.kind === 'activity' ? <ActivityGroup key={item.key} tools={item.tools} />
                 : <ActionRow key={item.key} action={item.action} busy={undoing === item.action.id} onUndo={() => void undo(item.action.id)} />)
             )}
@@ -485,6 +501,9 @@ function EmptyAssistant(props: { selectedMeal: boolean; onSuggestion: (value: st
 
 function MessageRow(props: {
   message: AgentMessage;
+  choices?: QuestionChoices[];
+  disabled?: boolean;
+  onAnswer: (answer: string) => Promise<void>;
 }) {
   if (props.message.role === 'toolResult' || props.message.role === 'user') return null;
   if (props.message.role === 'mealQuestion') {
@@ -492,11 +511,9 @@ function MessageRow(props: {
     return (
       <View style={styles.questionMessage}>
         <Text style={styles.questionMessageLabel}>{t('clarificationTitle')}</Text>
-        {questionMessage.questions.map((question, index) => (
-          <Text selectable key={`${question}-${index}`} style={styles.questionMessageText}>
-            {questionMessage.questions.length > 1 ? `${index + 1}. ` : ''}{question}
-          </Text>
-        ))}
+        <QuestionAnswers key={JSON.stringify(props.choices)}
+          questions={questionMessage.questions.map(question => ({ question, options: props.choices?.find(choice => choice.question === question)?.options ?? [] }))}
+          disabled={props.disabled} onSubmit={props.onAnswer} />
       </View>
     );
   }
@@ -575,6 +592,7 @@ function WorkingRow(props: { label: string }) {
 function toolActivityLabel(name: string, args: Record<string, unknown>): string {
   const generated = userFacingToolActivity(args.statusText);
   if (generated) return generated;
+  if (name === 'ask_question') return locale === 'ru' ? 'Готовлю варианты ответа' : 'Preparing answer choices';
   if (name === 'search_meals' || name === 'list_meals') return t('toolListMeals');
   if (name === 'get_meal') return t('toolGetMeal');
   if (name === 'view_meal_photos') return t('toolViewMealPhotos');
@@ -671,7 +689,6 @@ const styles = StyleSheet.create({
   assistantMessage: { maxWidth: '94%', paddingHorizontal: 2 },
   questionMessage: { backgroundColor: color.surface, borderColor: color.line, borderRadius: radius.surface, borderWidth: StyleSheet.hairlineWidth, maxWidth: '94%', padding: space.md },
   questionMessageLabel: { color: color.pending, fontFamily: type.ticketBold, fontSize: 13, letterSpacing: 0.35, marginBottom: 3 },
-  questionMessageText: { color: color.ink, fontSize: 16, fontWeight: '600', lineHeight: 22, marginTop: 5 },
   working: { alignItems: 'center', flexDirection: 'row', gap: space.sm, paddingVertical: space.sm },
   workingText: { color: color.muted, fontSize: 13 },
   toolActivity: { alignItems: 'center', flexDirection: 'row', gap: space.sm, minHeight: 34, paddingVertical: 6 },

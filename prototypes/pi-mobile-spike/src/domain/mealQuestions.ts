@@ -1,5 +1,9 @@
+import { normalizeQuestionChoices, type QuestionChoices } from './questionChoices.ts';
+
 export type MealClarification = {
   questions: string[];
+  /** Optional additive field: legacy questions remain readable without choices. */
+  choices?: QuestionChoices[];
   impactCalories: number;
 };
 
@@ -16,7 +20,7 @@ export function mealQuestions(clarification?: MealClarification | LegacyMealClar
 
 export function normalizeClarification(value: unknown): MealClarification | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const source = value as { questions?: unknown; question?: unknown; impactCalories?: unknown };
+  const source = value as { questions?: unknown; question?: unknown; choices?: unknown; impactCalories?: unknown };
   const rawQuestions = Array.isArray(source.questions)
     ? source.questions
     : typeof source.question === 'string' ? [source.question] : [];
@@ -28,5 +32,14 @@ export function normalizeClarification(value: unknown): MealClarification | unde
   if (questions.length === 0 || typeof source.impactCalories !== 'number' || !Number.isFinite(source.impactCalories) || source.impactCalories < 0) {
     return undefined;
   }
-  return { questions, impactCalories: source.impactCalories };
+  const choices = normalizeQuestionChoices(source.choices).filter(choice => questions.includes(choice.question));
+  return { questions, impactCalories: source.impactCalories, ...(choices.length ? { choices } : {}) };
+}
+
+export function mealQuestionChoices(clarification?: MealClarification | LegacyMealClarification): QuestionChoices[] {
+  const choices = normalizeQuestionChoices(clarification && 'choices' in clarification ? clarification.choices : undefined);
+  return mealQuestions(clarification).map(question => ({
+    question,
+    options: choices.find(choice => choice.question === question)?.options ?? [],
+  }));
 }

@@ -1,6 +1,6 @@
 import { NUTRITION_SEARCH_POLICY } from './nutritionSearchPolicy.ts';
 
-export const CHAT_PROMPT_VERSION = 'caldone-assistant-v7';
+export const CHAT_PROMPT_VERSION = 'caldone-assistant-v8';
 
 export function buildChatPrompt(input: {
   language: 'English' | 'Russian';
@@ -28,6 +28,8 @@ Rules for CalDone data:
 - Discussion, dissatisfaction, and questions are not authorization to change data.
 - An explicit and unambiguous user request to create, edit, delete, or update data authorizes that requested change immediately.
 - If the target or requested values are ambiguous, ask one concise clarification before using a mutation tool.
+- Whenever a question has useful selectable answers, use ask_question instead of asking only in prose. Offer two to six concise, distinct answers in the user's language. This applies to meal clarifications, choosing records, confirmations, goals and preferences. Use practical count or approximate portion presets with units when appropriate; do not invent an exact measurement or personal fact. Use plain text only when meaningful choices are impossible. The app adds Not sure and optional custom text; do not include those as model options.
+- After ask_question, end your turn and wait for an actual user reply. Tool results and suggested options are not user answers or authorization. A Not sure answer leaves the uncertainty unresolved. Do not repeat questions already displayed by a meal clarification card unless the user requests different choices.
 - When the user refers to a selected meal photo, get_meal and use view_meal_photos before asking the user to upload it again. Photos visible in the app header are saved meal photos available through those tools, even when not attached to the latest chat message.
 - Respect explicit user scope such as "everything in the picture". Do not silently reinterpret it as one item or repeat an already answered selection question. If counts or portions remain uncertain, ask only about those unresolved details and explain the uncertainty.
 - Before changing an existing meal, retrieve its current record unless the complete current record is already in context.

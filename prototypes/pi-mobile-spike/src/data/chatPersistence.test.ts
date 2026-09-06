@@ -28,13 +28,31 @@ function repositories() {
     runInNewContext(js, { exports, require(name: string) {
       if (name === 'expo-sqlite') return { openDatabaseSync: () => bridge };
       if (name === 'expo-file-system') return {};
-      if (name.startsWith('.')) return load(resolve(dirname(path), name + '.ts'));
+      if (name.startsWith('.')) return load(resolve(dirname(path), name.endsWith('.ts') ? name : name + '.ts'));
       return nativeRequire(name);
     }, Date, Math, Set, Map, console });
     return exports;
   }
   return { chat: load(resolve(import.meta.dirname, 'chatRepository.ts')), sqlite, load };
 }
+
+test('meal choices and assistant question results survive database round trips alongside legacy questions', async () => {
+  const { chat, sqlite, load } = repositories();
+  try {
+    const meals = load(resolve(import.meta.dirname, 'mealRepository.ts'));
+    await meals.initializeMeals();
+    await chat.initializeChat();
+    const questions = [{ question: 'How much?', options: ['100 g', '200 g'] }];
+    const analysis = { title: 'Rice', mealType: 'lunch', items: [], totals: { calories: 0, protein: 0, carbs: 0, fat: 0 }, clarification: { questions: ['How much?'], choices: questions, impactCalories: 150 } };
+    await meals.saveMealRecord({ id: 'meal-choices', revision: 1, capturedAt: 1, status: 'needs_input', note: '', photos: [], analysis });
+    assert.deepEqual(JSON.parse(JSON.stringify((await meals.getMeal('meal-choices')).analysis.clarification)), analysis.clarification);
+    await meals.saveMealRecord({ id: 'legacy', revision: 1, capturedAt: 1, status: 'needs_input', note: '', photos: [], analysis: { ...analysis, clarification: { question: 'Which sauce?', impactCalories: 120 } } });
+    assert.equal((await meals.getMeal('legacy')).analysis.clarification.questions[0], 'Which sauce?');
+    const thread = await chat.createChatThread();
+    await chat.saveChatMessages(thread.id, [{ role: 'toolResult', toolCallId: 'ask-1', toolName: 'ask_question', timestamp: 1, isError: false, content: [{ type: 'text', text: 'Questions displayed' }], details: { questions } }]);
+    assert.deepEqual(JSON.parse(JSON.stringify((await chat.loadChatMessages(thread.id))[0].details.questions)), questions);
+  } finally { sqlite.close(); }
+});
 
 test('saving chat and synchronizing a meal question concurrently preserves both', async () => {
   const { chat, sqlite } = repositories();
