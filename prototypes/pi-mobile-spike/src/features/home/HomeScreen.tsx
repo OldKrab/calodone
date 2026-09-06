@@ -10,6 +10,7 @@ import { formatDay, formatNumber, formatTime, locale, t } from '../../i18n';
 import type { MealActivityStage } from '../../services/mealActivity';
 
 export function HomeScreen(props: {
+  answeringMealIds?: ReadonlySet<string>;
   meals: Meal[];
   activities: ReadonlyMap<string, MealActivityStage>;
   goals: DailyGoals;
@@ -29,7 +30,7 @@ export function HomeScreen(props: {
 }) {
   const totals = totalsFor(props.meals);
   const meals = [...props.meals].sort((a, b) => b.capturedAt - a.capturedAt);
-  const attention = meals.filter((m) => m.status === 'needs_input' || m.status === 'failed');
+  const attention = meals.filter((m) => !props.answeringMealIds?.has(m.id) && (m.status === 'needs_input' || m.status === 'failed'));
   const rest = meals.filter((m) => m.status !== 'needs_input' && m.status !== 'failed');
   const progress = props.goals.calories ? Math.min(1, totals.calories / props.goals.calories) : 0;
   const unit = props.units.energy === 'kj' ? t('kilojoules') : t('kcal');

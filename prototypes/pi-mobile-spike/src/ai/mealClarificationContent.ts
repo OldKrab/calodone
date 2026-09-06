@@ -2,6 +2,7 @@ export type MealClarificationInput = {
   previousJson: string;
   question: string;
   answer: string;
+  assistantInterpretation?: string;
   note?: string;
   photos: readonly { base64: string; mimeType: string }[];
 };
@@ -13,7 +14,7 @@ export function buildMealClarificationContent(
   return [
     {
       type: 'text',
-      text: `Existing meal JSON:\n${input.previousJson}\n\nSaved note: ${input.note ?? ''}\nQuestion: ${input.question}\nAnswer: ${input.answer}`,
+      text: JSON.stringify({existingMeal: input.previousJson, savedNote: input.note ?? '', question: input.question, userAnswer: input.answer, assistantInterpretation: input.assistantInterpretation}),
     },
     ...input.photos.map((photo) => ({
       type: 'image' as const,

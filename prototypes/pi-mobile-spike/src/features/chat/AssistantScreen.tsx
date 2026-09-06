@@ -40,6 +40,7 @@ import { AssistantMarkdown } from './AssistantMarkdown';
 import { composerBottomSpace, keyboardAvoidingBehavior, keyboardAvoidingOffset, keyboardOccupiesWindow } from './composerPlacement';
 
 export function AssistantScreen(props: {
+  answeringMealIds?: ReadonlySet<string>;
   thread: ChatThread;
   selectedMeal?: Meal;
   meals: Meal[];
@@ -160,8 +161,9 @@ export function AssistantScreen(props: {
 
   const feed = useMemo(() => buildActivityFeed({
     ...snapshot,
+    answeringMealIds: props.answeringMealIds,
     pendingMealQuestions: Object.fromEntries(props.meals.map(meal => [meal.id, mealQuestions(meal.analysis?.clarification)])),
-  }), [snapshot, props.meals]);
+  }), [snapshot, props.meals, props.answeringMealIds]);
   const toolResults = useMemo(() => {
     const results = new Map<string, Extract<AgentMessage, { role: 'toolResult' }>>();
     for (const message of snapshot.messages) {

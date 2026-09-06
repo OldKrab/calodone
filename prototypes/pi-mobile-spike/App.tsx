@@ -1,3 +1,4 @@
+import { submitMealAnswer, subscribeMealAnswers } from './src/services/mealAnswerSubmission';
 import { foregroundWorkActive } from './src/services/foregroundWork';
 import { DescribeMealScreen } from './src/features/capture/DescribeMealScreen';
 import { hasMealInput } from './src/ai/mealInput';
@@ -133,6 +134,8 @@ function CaloDoneApp() {
   const [mealActivities, setMealActivities] = useState<ReadonlyMap<string, MealActivityStage>>(new Map());
 
   useEffect(() => subscribeMealActivity(setMealActivities), []);
+  const [answeringMealIds, setAnsweringMealIds] = useState<ReadonlySet<string>>(new Set());
+  useEffect(() => subscribeMealAnswers(setAnsweringMealIds), []);
   useEffect(() => {
     if (!ready) return;
     let previousState = AppState.currentState;
@@ -404,10 +407,10 @@ function CaloDoneApp() {
     void processMeal(meal.id).finally(refresh);
   };
 
-  const answer = async (meal: Meal, value: string) => {
+  const answer = (meal: Meal, value: string) => submitMealAnswer(meal.id, async () => {
     try { await answerMealClarification(meal.id, value); }
     finally { await refresh(); }
-  };
+  });
 
   const saveMeal = async (capturedAt: number, analysis: MealAnalysis) => {
     if (!selectedMeal) return;
@@ -847,6 +850,7 @@ function CaloDoneApp() {
       <View style={styles.appShell}>
         <StatusBar style="dark" />
         <AssistantScreen
+          answeringMealIds={answeringMealIds}
           meals={meals}
           bottomInset={navigationHeight}
           selectedMeal={meals.find((meal) => meal.id === assistantMealId)}
@@ -868,6 +872,7 @@ function CaloDoneApp() {
       <>
         <StatusBar style="dark" />
         <MealDetailScreen
+          answerSubmitting={answeringMealIds.has(selectedMeal.id)}
           activity={mealActivities.get(selectedMeal.id)}
           initialEditing={Boolean(manualMeal)}
           creating={Boolean(manualMeal)}
@@ -891,6 +896,7 @@ function CaloDoneApp() {
     <View style={styles.appShell}>
       <StatusBar style="dark" />
       <HomeScreen
+        answeringMealIds={answeringMealIds}
         activities={mealActivities}
         bottomInset={navigationHeight}
         canGoNext={canGoNext}

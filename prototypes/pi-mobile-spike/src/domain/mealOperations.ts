@@ -40,6 +40,7 @@ export function normalizeMealAnalysis(analysis: MealAnalysis): MealAnalysis {
   return {
     ...analysisFromItems(analysis),
     clarification: analysis.clarification,
+    research: analysis.research,
   };
 }
 
@@ -66,7 +67,7 @@ export function applyMealEdit(meal: Meal, edit: MealEdit): Meal {
       mealType: edit.mealType ?? meal.analysis.mealType,
       items: edit.items ?? meal.analysis.items,
       totals: edit.items ? sumMealItems(edit.items) : meal.analysis.totals,
-      ...(edit.items ? { clarification: undefined } : {}),
+      ...(edit.items ? { clarification: undefined, research: undefined } : {}),
     }
     : undefined;
   return {
