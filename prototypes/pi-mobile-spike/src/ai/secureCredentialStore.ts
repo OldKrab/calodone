@@ -5,7 +5,7 @@ import type {
 } from '@earendil-works/pi-ai';
 import * as SecureStore from 'expo-secure-store';
 
-const KEY_PREFIX = 'calodone.ai.credentials';
+const KEY_PREFIX = 'caldone.ai.credentials';
 const INDEX_KEY = `${KEY_PREFIX}.index`;
 
 // SecureStore values can be rejected around 2 KiB on some iOS versions. OAuth

@@ -1,6 +1,6 @@
 {
   "platforms": ["android"],
   "android": {
-    "modules": ["dev.calodone.loopback.CodexLoopbackModule"]
+    "modules": ["dev.caldone.loopback.CodexLoopbackModule"]
   }
 }

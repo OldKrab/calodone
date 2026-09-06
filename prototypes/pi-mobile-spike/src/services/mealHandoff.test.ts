@@ -34,11 +34,11 @@ const hooks=registerHooks({resolve(specifier,context,next){
   }
   return next(specifier,context);
 }});
-const {createCaloDoneTools}=await import('../ai/chatTools.ts');
+const {createCalDoneTools}=await import('../ai/chatTools.ts');
 const {subscribeMealAnswers}=await import('./mealAnswerSubmission.ts');
 
 test('clarification tool preserves the user request, saves observed research and publishes remaining questions in the active thread',async()=>{
-  const tools=createCaloDoneTools({threadId:'active-thread',attachments:new Map(),getMessages:()=>[{role:'chatUser',text:'Погугли, всю бутылку выпил',timestamp:1,attachments:[]}],onDataChanged:async()=>{}});
+  const tools=createCalDoneTools({threadId:'active-thread',attachments:new Map(),getMessages:()=>[{role:'chatUser',text:'Погугли, всю бутылку выпил',timestamp:1,attachments:[]}],onDataChanged:async()=>{}});
   const tool=tools.find(tool=>tool.name==='answer_meal_question')!;
   const result:any=await tool.execute('call-1',{mealId:'m',expectedRevision:1,interpretation:'Confirmed online: 200 kcal'},new AbortController().signal);
   assert.equal(fixture.input.answer,'Погугли, всю бутылку выпил');
@@ -55,7 +55,7 @@ test('failed required research preserves the previous meal and releases question
   const before=JSON.stringify(fixture.meal.analysis);
   let hidden:ReadonlySet<string>=new Set();
   const unsubscribe=subscribeMealAnswers(value=>{hidden=value});
-  const tools=createCaloDoneTools({threadId:'active-thread',attachments:new Map(),getMessages:()=>[{role:'chatUser',text:'Google it',timestamp:2,attachments:[]}],onDataChanged:async()=>{}});
+  const tools=createCalDoneTools({threadId:'active-thread',attachments:new Map(),getMessages:()=>[{role:'chatUser',text:'Google it',timestamp:2,attachments:[]}],onDataChanged:async()=>{}});
   await assert.rejects(tools.find(tool=>tool.name==='answer_meal_question')!.execute('call-2',{mealId:'m',expectedRevision:2},new AbortController().signal),/search/);
   assert.equal(JSON.stringify(fixture.meal.analysis),before);
   assert.equal(fixture.saved,1);

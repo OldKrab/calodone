@@ -7,7 +7,7 @@ group = 'dev.caldone'
 version = '0.1.0'
 
 android {
-  namespace "dev.caldone.loopback"
+  namespace "dev.caldone.widget"
   defaultConfig {
     versionCode 1
     versionName "0.1.0"

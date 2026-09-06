@@ -6,7 +6,7 @@ import type { ChatThread } from './chat.ts';
 import type { DailyGoals, Meal, MealAnalysis, MealStatus } from './meal.ts';
 import type { NotificationPreferences, NutritionUnits } from './preferences.ts';
 
-export const BACKUP_FORMAT = 'calodone-backup';
+export const BACKUP_FORMAT = 'caldone-backup';
 export const BACKUP_SCHEMA_VERSION = 1;
 export const MAX_BACKUP_BYTES = 128 * 1024 * 1024;
 
@@ -57,7 +57,9 @@ export type BackupMergePlan = {
 /** Parses the current CalDone backup contract before any local data is changed. */
 export function parseCalDoneBackup(value: unknown): CalDoneBackup {
   const root = record(value, 'backup');
-  if (root.format !== BACKUP_FORMAT) throw new Error('Unsupported backup format');
+  // The new package has separate storage; this legacy identifier is required
+  // to transfer exports from installations released before the package rename.
+  if (root.format !== BACKUP_FORMAT && root.format !== 'calodone-backup') throw new Error('Unsupported backup format');
   if (root.schemaVersion !== BACKUP_SCHEMA_VERSION) throw new Error('Unsupported backup version');
 
   return {

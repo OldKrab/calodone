@@ -82,3 +82,21 @@ test('merge planning never overwrites meals or conversations already on the devi
   assert.equal(plan.skippedMeals, 1);
   assert.equal(plan.skippedConversations, 1);
 });
+
+test('imports a pre-rename backup including meal and conversation photos', () => {
+  const backup = parseCalDoneBackup({
+    format: 'calodone-backup', schemaVersion: 1,
+    exportedAt: '2026-09-05T10:00:00.000Z',
+    preferences: { goals: { calories: 2280 }, locale: 'ru' },
+    meals: [meal],
+    conversations: [{
+      thread: { id: 'old-chat', title: 'Soup', createdAt: 1, updatedAt: 2 },
+      messages: [{ role: 'chatUser', text: 'Photo', timestamp: 2, attachments: [{ mimeType: 'image/png', base64: 'ZGVm' }] }],
+      actions: [],
+    }],
+  });
+  assert.equal(backup.format, 'caldone-backup');
+  assert.equal(backup.meals[0].photos[0].base64, 'YWJj');
+  assert.deepEqual(summarizeBackup(backup), { meals: 1, conversations: 1, photos: 2 });
+  assert.equal(backup.preferences.goals?.calories, 2280);
+});

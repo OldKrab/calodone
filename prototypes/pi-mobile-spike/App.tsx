@@ -192,7 +192,7 @@ function CalDoneApp() {
       if (!url) return;
       try {
         const parsed = new URL(url);
-        if (parsed.protocol === 'calodone:' && parsed.hostname === 'capture') setScreen('camera');
+        if (parsed.protocol === 'caldone:' && parsed.hostname === 'capture') setScreen('camera');
       } catch {
         // Ignore unrelated or malformed deep links.
       }
@@ -261,7 +261,7 @@ function CalDoneApp() {
       setNotificationPreferences(nextNotifications);
       setIncludePhotosInExport(storedExportPhotos !== 'false');
       if (storedLocale === 'en' || storedLocale === 'ru') setLocale(storedLocale);
-      const setupComplete = (await SecureStore.getItemAsync('calodone.setup.v2.complete')) === 'true';
+      const setupComplete = (await SecureStore.getItemAsync('caldone.setup.v2.complete')) === 'true';
       setShowSetup(!setupComplete);
       const signedIn = await isSignedIn();
       setAuthenticated(signedIn);
@@ -505,7 +505,7 @@ function CalDoneApp() {
       setGoals(nextGoals);
       setAuthenticated(true);
       setShowSetup(false);
-      await SecureStore.setItemAsync('calodone.setup.v2.complete', 'true');
+      await SecureStore.setItemAsync('caldone.setup.v2.complete', 'true');
       await applyNotificationPreferences(notificationPreferences, false);
       await processPendingMeals();
       await refresh();
@@ -639,7 +639,7 @@ function CalDoneApp() {
       file.write(JSON.stringify({
         exportedAt: new Date().toISOString(),
         processing: { foregroundServiceActive: foregroundWorkActive(), meals: (await listMeals()).map(meal => ({ status: meal.status, capturedAt: meal.capturedAt, error: meal.error })) },
-        app: { version: '1.1.7', platform: Platform.OS, platformVersion: Platform.Version },
+        app: { version: '1.2.0', platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
           if (event.operation === 'layout' || event.operation === 'lifecycle' || event.operation === 'camera' || event.operation === 'web_search') return event;
