@@ -130,3 +130,16 @@ test('leaving and reopening chat retains the pending turn and its eventual answe
   (fixture as any).hold=undefined;
   await reopened.close();
 });
+
+test('completed analysis replies use the app receipt before display and diagnostics', async () => {
+  fixture.messages=[
+    {role:'chatUser',text:'Google it',attachments:[],timestamp:1},
+    {role:'toolResult',toolName:'answer_meal_question',toolCallId:'saved',isError:false,content:[],details:{value:{confirmation:'Recorded estimate. Web search was unavailable.'}}},
+  ];
+  const session=await openChatSession({thread:{id:'thread-confirmation',title:'Meal',createdAt:1,updatedAt:1},onChanged:()=>{},onDataChanged:async()=>{}});
+  try {
+    const message:any={role:'assistant',content:[{type:'text',text:'Exact nutrition was not found online.'}],stopReason:'stop',provider:'test',model:'test'};
+    (fixture as any).listener({type:'message_end',message});
+    assert.deepEqual(message.content,[{type:'text',text:'Recorded estimate. Web search was unavailable.'}]);
+  } finally { await session.close(); }
+});

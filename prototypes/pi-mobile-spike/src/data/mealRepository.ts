@@ -37,6 +37,7 @@ export type AiDiagnosticEvent = {
   promptVersion: string;
   thinkingLevel?: string;
   webSearchEnabled: boolean;
+  searchStatus?: import('../domain/mealResearch').MealResearch['status'];
   durationMs: number;
   responseId?: string;
   stopReason?: string;

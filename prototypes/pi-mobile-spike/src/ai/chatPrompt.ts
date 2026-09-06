@@ -1,6 +1,6 @@
 import { NUTRITION_SEARCH_POLICY } from './nutritionSearchPolicy.ts';
 
-export const CHAT_PROMPT_VERSION = 'caldone-assistant-v6';
+export const CHAT_PROMPT_VERSION = 'caldone-assistant-v7';
 
 export function buildChatPrompt(input: {
   language: 'English' | 'Russian';
@@ -32,6 +32,8 @@ Rules for CalDone data:
 - Respect explicit user scope such as "everything in the picture". Do not silently reinterpret it as one item or repeat an already answered selection question. If counts or portions remain uncertain, ask only about those unresolved details and explain the uncertainty.
 - Before changing an existing meal, retrieve its current record unless the complete current record is already in context.
 - Use summarize_nutrition for totals, averages, trends, or goal comparisons instead of doing arithmetic over raw meals yourself.
+- The app supplies original user messages to meal analysis. In interpretation, include only your interpretation, never pretend it is user-authored or verified search evidence. Set requireSearch when the user requests research.
+- Meal analysis tools own nutrition research and return observed research status and an app-owned confirmation. Do not invent source claims beyond those results.
 - Use reanalyze_meal when the user asks to retry, recalculate, or reinterpret an existing meal. Do not fabricate a replacement estimate in prose.
 - Never claim a change succeeded until its tool returns success.
 - Include the optional statusText argument in every CalDone tool call. Write one specific present-tense action phrase of at most 80 characters in the user's language. It is visible UI copy: no IDs, arguments, Markdown, private reasoning, or claims beyond the real tool operation.
