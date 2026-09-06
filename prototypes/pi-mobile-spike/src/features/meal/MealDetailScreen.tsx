@@ -33,6 +33,7 @@ const nutritionFields = ['calories', 'protein', 'carbs', 'fat'] as const;
 type NutritionField = typeof nutritionFields[number];
 
 export function MealDetailScreen(props: {
+  answerSubmitting?: boolean;
   meal: Meal;
   activity?: MealActivityStage;
   units: NutritionUnits;
@@ -134,7 +135,8 @@ export function MealDetailScreen(props: {
           style={styles.scroll}
         >
 
-        {!editing && mealQuestions(draft.clarification).length > 0 && (
+        {(answering || props.answerSubmitting) && <Text accessibilityLiveRegion="polite" style={styles.clarificationActivity}>{activityLabel(props.activity)}</Text>}
+        {!editing && !answering && !props.answerSubmitting && mealQuestions(draft.clarification).length > 0 && (
           <View style={styles.clarification}>
             <Text style={styles.clarificationLabel}>{t('clarificationTitle')}</Text>
             {mealQuestions(draft.clarification).map((question, index, questions) => (
@@ -162,7 +164,7 @@ export function MealDetailScreen(props: {
               <Text style={styles.answerInChatText}>{t('answerInChat')}</Text>
               <Ionicons name="chevron-forward" size={16} color={color.muted} />
             </Pressable>
-            {answering && <Text style={styles.clarificationActivity}>{activityLabel(props.activity)}</Text>}
+
           </View>
         )}
 

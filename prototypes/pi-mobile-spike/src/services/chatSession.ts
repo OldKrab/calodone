@@ -1,3 +1,5 @@
+import { confirmationForTurn } from './mealConfirmation';
+import { submitMealAnswer } from './mealAnswerSubmission';
 import type { ToolExecution } from '../features/chat/activityFeed';
 import { AppState } from 'react-native';
 import type { Agent, AgentMessage } from '@earendil-works/pi-agent-core';
@@ -164,7 +166,11 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
 
   const emit = () => input.onChanged({
     messages: agent.state.messages,
-    streamingMessage: agent.state.streamingMessage,
+    // Hide generated confirmation prose while it streams; the completed reply
+    // is replaced with the app-owned receipt before display or persistence.
+    streamingMessage: confirmationForTurn(agent.state.messages) && agent.state.streamingMessage?.role === 'assistant'
+      ? { ...agent.state.streamingMessage, content: agent.state.streamingMessage.content.filter(block => block.type !== 'text') }
+      : agent.state.streamingMessage,
     actions,
     toolExecutions: { ...toolExecutions },
     providerActivities: [...providerActivities.values()],
@@ -195,7 +201,18 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
     tools: createCaloDoneTools({
       threadId: input.thread.id,
       attachments: attachmentMap,
-      onDataChanged: input.onDataChanged,
+      getMessages: () => agent.state.messages,
+      onDataChanged: async () => {
+        // Analysis may append remaining questions while the agent is running.
+        // Merge only those durable messages; never replace its active tool loop.
+        const stored = await loadChatMessages(input.thread.id);
+        const existing = new Set(agent.state.messages.filter(message => message.role === 'mealQuestion').map(message => JSON.stringify(message)));
+        for (const message of stored) {
+          if (message.role === 'mealQuestion' && !existing.has(JSON.stringify(message))) agent.state.messages.push(message);
+        }
+        await input.onDataChanged();
+        emit();
+      },
     }),
   });
 
@@ -218,6 +235,8 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
       }).catch(() => undefined);
     }
     if (event.type === 'message_end' && event.message.role === 'assistant') {
+      const confirmation = confirmationForTurn(agent.state.messages);
+      if (confirmation && event.message.stopReason === 'stop') event.message.content = [{type:'text',text:confirmation}];
       void recordChatDiagnostic(input.thread.id, turnStartedAt, event.message);
     }
     if (event.type === 'message_end' || event.type === 'agent_end') {
@@ -297,8 +316,15 @@ async function createOpenChatSession(input: OpenChatSessionInput, releaseLease: 
       hasSent = true;
       recoveryAbort = new AbortController();
       try {
-        await agent.prompt(message);
-        if (isConnectionError(agent.state.errorMessage)) await retryFailedResponse(true);
+        const mealId = input.selectedMealId ?? input.thread.mealId;
+        const run = async () => {
+          try {
+            await agent.prompt(message);
+            if (isConnectionError(agent.state.errorMessage)) await retryFailedResponse(true);
+          } finally { await input.onDataChanged(); }
+        };
+        if (mealId) await submitMealAnswer(mealId, run);
+        else await run();
       } finally {
         emit();
       }

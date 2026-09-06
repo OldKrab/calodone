@@ -1,3 +1,6 @@
+import { trackedSearchFetch, withHostedSearch } from './hostedSearch';
+import { acceptMealResearch, MealResearchError } from './mealResearchResult';
+import { explicitlyRequestsSearch, type MealResearch } from '../domain/mealResearch';
 import { requestWithDeadline } from '../services/requestDeadline';
 import { mealInputContent } from './mealInput';
 import { AppState } from 'react-native';
@@ -196,15 +199,7 @@ function supportsHostedWebSearch(model: Model<string>): boolean {
 async function hostedToolOptions(model: Model<string>) {
   if (!supportsHostedWebSearch(model) || !await getWebSearchEnabled(model.provider)) return {};
   return {
-    onPayload: (payload: unknown) => {
-      if (!payload || typeof payload !== 'object') return payload;
-      const body = payload as Record<string, unknown>;
-      const currentTools = Array.isArray(body.tools) ? body.tools : [];
-      if (currentTools.some((tool) => tool && typeof tool === 'object' && (tool as { type?: string }).type === 'web_search')) {
-        return body;
-      }
-      return { ...body, tools: [...currentTools, { type: 'web_search' }] };
-    },
+    onPayload: (payload: unknown) => withHostedSearch(payload),
   };
 }
 
@@ -224,6 +219,7 @@ async function recordAiDiagnostic(input: {
   startedAt: number;
   response?: AssistantMessage;
   error?: unknown;
+  research?: MealResearch;
 }): Promise<void> {
   const selectedModelId = await getSelectedModel(input.model.provider);
   const [thinkingLevel, webSearchEnabled] = await Promise.all([
@@ -251,6 +247,7 @@ async function recordAiDiagnostic(input: {
     usage: response?.usage,
     contentTypes: response?.content.map((block) => block.type),
     toolNames,
+    searchStatus: input.research?.status ?? (input.error instanceof MealResearchError ? input.error.research.status : undefined),
     outputText,
     error: input.error instanceof Error ? input.error.message.slice(0, 1000) : input.error ? String(input.error).slice(0, 1000) : response?.errorMessage,
   }).catch(() => undefined);
@@ -443,45 +440,51 @@ async function completeMealRequest(
   context: Context,
   options: ModelsSimpleStreamOptions,
   onActivity?: (activity: MealModelActivity) => void,
-): Promise<AssistantMessage> {
+  requireSearch = false,
+): Promise<AssistantMessage & { research: MealResearch }> {
   return retryConnection(() => requestWithDeadline(async signal => {
-  let answerStarted = false;
-  const stream = models.streamSimple(model, context, {
-    ...options,
-    signal,
-    fetch: options.onPayload
-      ? fetchWithProviderActivity((activity) => {
-        if (!signal.aborted && !answerStarted && activity.status === 'active') onActivity?.('web_search');
-      })
-      : options.fetch,
-  });
-  for await (const event of stream) {
-    if (signal.aborted) throw new Error('Request cancelled');
-    if (event.type === 'thinking_start') onActivity?.('thinking');
-    else if (event.type === 'text_start') {
-      answerStarted = true;
-      onActivity?.('writing_result');
+    let answerStarted = false;
+    const tracked = trackedSearchFetch(expoFetch as typeof globalThis.fetch, activity => {
+      if (!signal.aborted && !answerStarted && activity.status === 'active') onActivity?.('web_search');
+    });
+    const stream = models.streamSimple(model, context, {
+      ...options,
+      signal,
+      onPayload: options.onPayload ? payload => withHostedSearch(payload, requireSearch) : undefined,
+      fetch: options.onPayload ? tracked.fetch : options.fetch,
+    });
+    for await (const event of stream) {
+      if (signal.aborted) throw new Error('Request cancelled');
+      if (event.type === 'thinking_start') onActivity?.('thinking');
+      else if (event.type === 'text_start') {
+        answerStarted = true;
+        onActivity?.('writing_result');
+      }
     }
-  }
-  const result = await stream.result();
-  if (result.stopReason === 'error' || result.stopReason === 'aborted') throw new Error(result.errorMessage ?? 'Meal request failed');
-  return result;
+    const result = await stream.result();
+    if (result.stopReason === 'error' || result.stopReason === 'aborted') throw new Error(result.errorMessage ?? 'Meal request failed');
+    const research: MealResearch = options.onPayload ? await tracked.result() : {status:'unavailable',sources:[]};
+    acceptMealResearch(research, requireSearch);
+    return Object.assign(result, {research});
   }, options.signal), () => waitForConnectionRecovery(options.signal));
 }
 
 export async function analyzeMeal(input: {
+  requireSearch?: boolean;
+  assistantInterpretation?: string;
   photos: ImageInput[];
   note?: string;
   language: 'English' | 'Russian';
   mealId: string;
   onActivity?: (activity: MealModelActivity) => void;
-}): Promise<{ model: string; text: string }> {
+}): Promise<{ model: string; text: string; research: MealResearch }> {
   const content = mealInputContent(input);
+  if (input.assistantInterpretation) content.push({type:'text',text:JSON.stringify({assistantInterpretation:input.assistantInterpretation})});
   const model = input.photos.length > 0 ? await imageModel() : await textModel();
   const requestOptions = await modelRequestOptions(model);
   const startedAt = Date.now();
   await appendDiagnosticEvent({ id: `${startedAt.toString(36)}-analysis-start`, createdAt: startedAt, operation: 'analyze', phase: 'started', mealId: input.mealId, appState: AppState.currentState, provider: model.provider, model: model.id, api: model.api, promptVersion: MEAL_ANALYSIS_PROMPT_VERSION, webSearchEnabled: await getWebSearchEnabled(model.provider), durationMs: 0 });
-  let response: AssistantMessage;
+  let response: AssistantMessage & { research: MealResearch };
   try {
     response = await completeMealRequest(
       model,
@@ -503,8 +506,9 @@ export async function analyzeMeal(input: {
         transport: 'sse',
       },
       input.onActivity,
+      input.requireSearch ?? explicitlyRequestsSearch(input.note ?? ''),
     );
-    await recordAiDiagnostic({ operation: 'analyze', mealId: input.mealId, model, startedAt, response });
+    await recordAiDiagnostic({ operation: 'analyze', mealId: input.mealId, model, startedAt, response, research: response.research });
   } catch (error) {
     await recordAiDiagnostic({ operation: 'analyze', mealId: input.mealId, model, startedAt, error });
     throw error;
@@ -514,10 +518,12 @@ export async function analyzeMeal(input: {
     throw new Error(response.errorMessage ?? 'Unknown Pi request error');
   }
 
-  return { model: model.id, text: contentText(response.content) };
+  return { model: model.id, text: contentText(response.content), research: response.research };
 }
 
 export async function refineMealAnalysis(input: {
+  requireSearch?: boolean;
+  assistantInterpretation?: string;
   mealId: string;
   signal?: AbortSignal;
   previousJson: string;
@@ -527,11 +533,11 @@ export async function refineMealAnalysis(input: {
   answer: string;
   language: 'English' | 'Russian';
   onActivity?: (activity: MealModelActivity) => void;
-}): Promise<{ model: string; text: string }> {
+}): Promise<{ model: string; text: string; research: MealResearch }> {
   const model = input.photos.length > 0 ? await imageModel() : await textModel();
   const requestOptions = await modelRequestOptions(model);
   const startedAt = Date.now();
-  let response: AssistantMessage;
+  let response: AssistantMessage & { research: MealResearch };
   try {
     response = await completeMealRequest(
       model,
@@ -545,8 +551,9 @@ export async function refineMealAnalysis(input: {
       },
       { ...requestOptions, signal: input.signal, fetch: expoFetch as typeof globalThis.fetch, transport: 'sse' },
       input.onActivity,
+      input.requireSearch ?? explicitlyRequestsSearch(input.answer),
     );
-    await recordAiDiagnostic({ operation: 'clarify', mealId: input.mealId, model, startedAt, response });
+    await recordAiDiagnostic({ operation: 'clarify', mealId: input.mealId, model, startedAt, response, research: response.research });
   } catch (error) {
     await recordAiDiagnostic({ operation: 'clarify', mealId: input.mealId, model, startedAt, error });
     throw error;
@@ -555,22 +562,23 @@ export async function refineMealAnalysis(input: {
   if (response.stopReason === 'error') {
     throw new Error(response.errorMessage ?? 'Unknown Pi request error');
   }
-  return { model: model.id, text: contentText(response.content) };
+  return { model: model.id, text: contentText(response.content), research: response.research };
 }
 
 export async function correctMealAnalysis(input: {
+  requireSearch?: boolean;
   mealId: string;
   previousJson: string;
   correction: string;
   language: 'English' | 'Russian';
   onActivity?: (activity: MealModelActivity) => void;
-}): Promise<{ model: string; text: string }> {
+}): Promise<{ model: string; text: string; research: MealResearch }> {
   const correction = input.correction.trim();
   if (!correction) throw new Error('A correction is required');
   const model = await textModel();
   const requestOptions = await modelRequestOptions(model);
   const startedAt = Date.now();
-  let response: AssistantMessage;
+  let response: AssistantMessage & { research: MealResearch };
   try {
     response = await completeMealRequest(
       model,
@@ -587,8 +595,9 @@ export async function correctMealAnalysis(input: {
       },
       { ...requestOptions, fetch: expoFetch as typeof globalThis.fetch, transport: 'sse' },
       input.onActivity,
+      input.requireSearch ?? explicitlyRequestsSearch(input.correction),
     );
-    await recordAiDiagnostic({ operation: 'correct', mealId: input.mealId, model, startedAt, response });
+    await recordAiDiagnostic({ operation: 'correct', mealId: input.mealId, model, startedAt, response, research: response.research });
   } catch (error) {
     await recordAiDiagnostic({ operation: 'correct', mealId: input.mealId, model, startedAt, error });
     throw error;
@@ -597,5 +606,5 @@ export async function correctMealAnalysis(input: {
   if (response.stopReason === 'error') {
     throw new Error(response.errorMessage ?? 'Unknown Pi request error');
   }
-  return { model: model.id, text: contentText(response.content) };
+  return { model: model.id, text: contentText(response.content), research: response.research };
 }

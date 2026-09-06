@@ -21,6 +21,7 @@ export function buildActivityFeed(input: {
   toolExecutions?: Record<string, ToolExecution>;
   /** Current meal state controls actionable cards; durable history is not a pending queue. */
   pendingMealQuestions?: Record<string, string[]>;
+  answeringMealIds?: ReadonlySet<string>;
 }): ActivityFeedItem[] {
   const messages = [...input.messages];
   if (input.streamingMessage && !messages.includes(input.streamingMessage)) messages.push(input.streamingMessage);
@@ -41,6 +42,7 @@ export function buildActivityFeed(input: {
     if (message.role !== 'assistant') {
       group = undefined;
       flushReceipts(message.timestamp);
+      if (message.role === 'mealQuestion' && input.answeringMealIds?.has(message.mealId)) continue;
       if (message.role === 'mealQuestion' && input.pendingMealQuestions) {
         const pending = input.pendingMealQuestions[message.mealId] ?? [];
         const questions = message.questions.filter(question => pending.includes(question));

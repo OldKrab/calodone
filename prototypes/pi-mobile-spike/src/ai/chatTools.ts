@@ -1,4 +1,5 @@
-import type { AgentTool } from '@earendil-works/pi-agent-core';
+import { mealConfirmation } from '../services/mealConfirmation';
+import type { AgentMessage, AgentTool } from '@earendil-works/pi-agent-core';
 import { Type } from '@earendil-works/pi-ai';
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -18,7 +19,8 @@ import { estimateDailyGoals, mergeGoalProfile, parseGoalProfile, type GoalProfil
 import type { ChatAttachment } from '../domain/chat';
 import type { DailyGoals, Meal, MealAnalysis, MealItem, MealPhoto, MealStatus } from '../domain/meal';
 import { analysisFromItems, applyMealEdit, summarizeNutrition } from '../domain/mealOperations';
-import { t } from '../i18n';
+import { locale, t } from '../i18n';
+import { mealRequestContext } from './mealRequestContext';
 import { answerMealClarification, reanalyzeSavedMeal } from '../services/mealProcessor';
 
 type ActivityParams = { statusText?: string };
@@ -35,8 +37,8 @@ type EditMealParams = ActivityParams & {
   mealType?: MealAnalysis['mealType']; items?: MealItem[]; addAttachmentIds?: string[]; removePhotoIds?: string[];
 };
 type MealMutationParams = ActivityParams & { mealId: string; expectedRevision: number };
-type ReanalyzeMealParams = MealMutationParams & { instruction?: string };
-type AnswerQuestionParams = MealMutationParams & { answer: string };
+type ReanalyzeMealParams = MealMutationParams & { interpretation?: string; requireSearch?: boolean };
+type AnswerQuestionParams = MealMutationParams & { interpretation?: string; requireSearch?: boolean };
 type UpdateGoalsParams = ActivityParams & { calories?: number | null; protein?: number | null; carbs?: number | null; fat?: number | null };
 type UpdateGoalProfileParams = Partial<GoalProfile> & ActivityParams;
 
@@ -59,6 +61,7 @@ const mealStatusSchema = Type.Union([
 
 export function createCaloDoneTools(input: {
   threadId: string;
+  getMessages: () => AgentMessage[];
   attachments: Map<string, ChatAttachment>;
   onDataChanged: () => Promise<void>;
 }): AgentTool[] {
@@ -206,6 +209,7 @@ export function createCaloDoneTools(input: {
       }, { additionalProperties: false }),
       execute: async (callId, rawParams) => withReceipt(callId, input.threadId, async () => {
         const params = rawParams as EditMealParams;
+        if (params.items && mealRequestContext(input.getMessages()).requireSearch) throw new Error("Use reanalyze_meal to research and recalculate the requested nutrition before saving it.");
         const before = await requiredMeal(params.mealId);
         requireRevision(before, params.expectedRevision);
         if (!before.analysis && (params.title || params.mealType || params.items)) throw new Error('This meal has no nutrition estimate. Reanalyze it or edit only its time, note, or photos.');
@@ -237,13 +241,15 @@ export function createCaloDoneTools(input: {
       executionMode: 'sequential',
       parameters: Type.Object({
         mealId: Type.String(), expectedRevision: Type.Number({ minimum: 1 }),
-        instruction: Type.Optional(Type.String({ minLength: 1 })), statusText: activitySchema,
+        interpretation: Type.Optional(Type.String({ description: 'Assistant interpretation only; original user messages are supplied by the app.' })),
+        requireSearch: Type.Optional(Type.Boolean({ description: 'True when the user requests research, including indirect wording.' })), statusText: activitySchema,
       }, { additionalProperties: false }),
       execute: async (callId, rawParams) => withReceipt(callId, input.threadId, async () => {
         const params = rawParams as ReanalyzeMealParams;
         const before = await requiredMeal(params.mealId);
         requireRevision(before, params.expectedRevision);
-        await reanalyzeSavedMeal(before.id, params.instruction?.trim());
+        const context = mealRequestContext(input.getMessages(), params.interpretation, params.requireSearch);
+        await reanalyzeSavedMeal(before.id, context.userMessages.join("\n"), context);
         const next = await requiredMeal(before.id);
         const action = await recordChatAction({
           id: actionIdForCall(callId), threadId: input.threadId,
@@ -251,7 +257,7 @@ export function createCaloDoneTools(input: {
           undo: { kind: 'restore_meal', meal: before, expectedMeal: next },
         });
         await input.onDataChanged();
-        return actionResult(action.id, action.label, mealSummary(next));
+        return actionResult(action.id, action.label, { ...mealSummary(next), research: next.analysis?.research, confirmation: mealConfirmation(next, locale === 'ru' ? 'ru' : 'en') });
       }),
     },
     {
@@ -261,14 +267,16 @@ export function createCaloDoneTools(input: {
       executionMode: 'sequential',
       parameters: Type.Object({
         mealId: Type.String(), expectedRevision: Type.Number({ minimum: 1 }),
-        answer: Type.String({ minLength: 1 }), statusText: activitySchema,
+        interpretation: Type.Optional(Type.String({ description: 'Assistant interpretation, never a claimed user answer or verified source.' })),
+        requireSearch: Type.Optional(Type.Boolean({ description: 'True when the user requests research, including indirect wording.' })), statusText: activitySchema,
       }, { additionalProperties: false }),
       execute: async (callId, rawParams, signal) => withReceipt(callId, input.threadId, async () => {
         const params = rawParams as AnswerQuestionParams;
         const before = await requiredMeal(params.mealId);
         requireRevision(before, params.expectedRevision);
         if (!before.analysis?.clarification) throw new Error('This meal has no unanswered clarification question.');
-        await answerMealClarification(before.id, params.answer.trim(), input.threadId, signal);
+        const context = mealRequestContext(input.getMessages(), params.interpretation, params.requireSearch);
+        await answerMealClarification(before.id, context.userMessages.join("\n"), input.threadId, signal, context);
         const next = await requiredMeal(before.id);
         const action = await recordChatAction({
           id: actionIdForCall(callId), threadId: input.threadId,
@@ -276,7 +284,7 @@ export function createCaloDoneTools(input: {
           undo: { kind: 'restore_meal', meal: before, expectedMeal: next },
         });
         await input.onDataChanged();
-        return actionResult(action.id, action.label, mealSummary(next));
+        return actionResult(action.id, action.label, { ...mealSummary(next), research: next.analysis?.research, confirmation: mealConfirmation(next, locale === 'ru' ? 'ru' : 'en') });
       }),
     },
     {
@@ -410,7 +418,7 @@ function mealSummary(meal: Meal) {
   return {
     id: meal.id, revision: meal.revision, capturedAt: new Date(meal.capturedAt).toISOString(), status: meal.status,
     title: meal.analysis?.title, mealType: meal.analysis?.mealType, totals: meal.analysis?.totals,
-    note: meal.note, photoCount: meal.photos.length, clarification: meal.analysis?.clarification, error: meal.error,
+    research: meal.analysis?.research, note: meal.note, photoCount: meal.photos.length, clarification: meal.analysis?.clarification, error: meal.error,
   };
 }
 

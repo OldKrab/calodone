@@ -16,6 +16,8 @@ export type NutritionTotals = {
 export type MealItem = NutritionTotals & { name: string; quantity: string };
 
 export type MealAnalysis = {
+  /** Provider-observed research from this calculation, not model-supplied evidence. */
+  research?: import('./mealResearch').MealResearch;
   title: string;
   mealType: MealType;
   items: MealItem[];
@@ -87,7 +89,7 @@ export function parseMealAnalysis(text: string): MealAnalysis {
   ) {
     throw new Error('The model returned an invalid meal result');
   }
-  return normalizeMealAnalysis({ ...value, clarification } as MealAnalysis);
+  return normalizeMealAnalysis({ ...value, research: undefined, clarification } as MealAnalysis);
 }
 
 function validTotals(value: Partial<NutritionTotals>): boolean {
