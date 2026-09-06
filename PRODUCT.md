@@ -8,11 +8,11 @@ android
 
 ## Users
 
-CaloDone is primarily for busy people who want useful calorie and macro tracking without turning meal logging into a separate task.
+CalDone is primarily for busy people who want useful calorie and macro tracking without turning meal logging into a separate task.
 
 ## Product Purpose
 
-CaloDone turns a meal photo into an editable nutrition log with minimal interruption. Success means a user can capture what they ate, return to their day, and later review or correct a useful record without reconstructing the meal by hand.
+CalDone turns a meal photo into an editable nutrition log with minimal interruption. Success means a user can capture what they ate, return to their day, and later review or correct a useful record without reconstructing the meal by hand.
 
 ## Positioning
 
@@ -34,7 +34,7 @@ The core promise is photo-to-log: capture the meal as it is, then receive an edi
 
 ## Brand Commitments
 
-- The incumbent product name is **CaloDone**. Renaming remains an open decision; until then, use CaloDone without inventing a new logo or identity claim.
+- The incumbent product name is **CalDone**. Renaming remains an open decision; until then, use CalDone without inventing a new logo or identity claim.
 - No palette, typography, illustration style, component language, or other visual direction from the prototype is binding.
 
 ## Evidence on Hand

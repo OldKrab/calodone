@@ -1,4 +1,4 @@
-# CaloDone fork icon
+# CalDone fork icon
 
 The user selected this bent-fork mark for the app. The continuous fork/check silhouette represents food logging completed with little effort. Use `calodone-fork-icon.png` unchanged for the launcher, welcome screen, and About screen.
 

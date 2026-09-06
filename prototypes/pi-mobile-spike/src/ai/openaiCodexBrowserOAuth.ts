@@ -190,7 +190,7 @@ async function login(interaction: ProviderAuthInteraction): Promise<OAuthCredent
   });
   interaction.notify({ type: 'progress', message: 'OAuth: opening browser' });
 
-  // Android's auth session observes the CaloDone deep link emitted by the
+  // Android's auth session observes the CalDone deep link emitted by the
   // callback page and brings the existing activity back to the foreground.
   // The authorization code itself is accepted only by the loopback listener.
   void WebBrowser.openAuthSessionAsync(authorization.url, APP_RETURN_URI).then(

@@ -12,7 +12,7 @@ const meal = {
   },
 };
 
-test('parses the current versioned CaloDone backup format', () => {
+test('parses the current versioned CalDone backup format', () => {
   const backup = parseCaloDoneBackup({
     format: BACKUP_FORMAT,
     schemaVersion: BACKUP_SCHEMA_VERSION,

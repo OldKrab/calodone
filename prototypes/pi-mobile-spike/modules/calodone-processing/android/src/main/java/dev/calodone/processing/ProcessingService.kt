@@ -27,7 +27,7 @@ class ProcessingService : Service() {
       )
     }
     val builder = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, channel) else Notification.Builder(this)
-    builder.setContentTitle(intent?.getStringExtra("title") ?: "CaloDone")
+    builder.setContentTitle(intent?.getStringExtra("title") ?: "CalDone")
       .setContentText(intent?.getStringExtra("body") ?: "Analyzing meal")
       .setSmallIcon(android.R.drawable.ic_menu_recent_history)
       .setOngoing(true).setOnlyAlertOnce(true).setCategory(Notification.CATEGORY_PROGRESS)
@@ -36,7 +36,7 @@ class ProcessingService : Service() {
     }
     startForeground(4102, builder.build())
     if (wakeLock?.isHeld != true) {
-      wakeLock = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CaloDone:analysis").apply { acquire(10 * 60_000L) }
+      wakeLock = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CalDone:analysis").apply { acquire(10 * 60_000L) }
     }
     // A final safety bound if JS is terminated before its normal finally cleanup.
     handler.removeCallbacks(expire)

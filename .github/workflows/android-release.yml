@@ -85,7 +85,7 @@ jobs:
         id: artifact
         run: |
           version=$(node -p "require('./package.json').version")
-          artifact="calodone-${version}-arm64.apk"
+          artifact="caldone-${version}-arm64.apk"
           cp android/app/build/outputs/apk/release/app-release.apk "$artifact"
 
           apksigner=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)

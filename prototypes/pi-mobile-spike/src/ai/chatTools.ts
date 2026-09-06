@@ -171,7 +171,7 @@ export function createCaloDoneTools(input: {
     {
       name: 'create_meal',
       label: 'Create meal',
-      description: 'Create a complete meal only when explicitly asked. Supply item estimates; CaloDone derives totals. Attachment IDs must come from this conversation.',
+      description: 'Create a complete meal only when explicitly asked. Supply item estimates; CalDone derives totals. Attachment IDs must come from this conversation.',
       executionMode: 'sequential',
       parameters: Type.Object({
         title: Type.String({ minLength: 1 }), mealType: mealTypeSchema,
@@ -195,7 +195,7 @@ export function createCaloDoneTools(input: {
     {
       name: 'edit_meal',
       label: 'Edit meal',
-      description: 'Patch one current meal after reading it. CaloDone derives totals and preserves unrelated analysis state.',
+      description: 'Patch one current meal after reading it. CalDone derives totals and preserves unrelated analysis state.',
       executionMode: 'sequential',
       parameters: Type.Object({
         mealId: Type.String(), expectedRevision: Type.Number({ minimum: 1 }),

@@ -546,7 +546,7 @@ function CaloDoneApp() {
   const exportData = async () => {
     try {
       const assistantInstructions = await getPreference('assistant_custom_instructions');
-      await shareJsonExport('calodone-export.json', t('exportMyData'), {
+      await shareJsonExport('caldone-export.json', t('exportMyData'), {
         format: BACKUP_FORMAT,
         schemaVersion: BACKUP_SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
@@ -631,12 +631,12 @@ function CaloDoneApp() {
         listDiagnosticEvents(),
       ]);
       const directory = await Directory.pickDirectoryAsync();
-      const filename = `calodone-diagnostics-${Date.now()}.json`;
+      const filename = `caldone-diagnostics-${Date.now()}.json`;
       const file = directory.createFile(filename, 'application/json');
       file.write(JSON.stringify({
         exportedAt: new Date().toISOString(),
         processing: { foregroundServiceActive: foregroundWorkActive(), meals: (await listMeals()).map(meal => ({ status: meal.status, capturedAt: meal.capturedAt, error: meal.error })) },
-        app: { version: '1.1.6', platform: Platform.OS, platformVersion: Platform.Version },
+        app: { version: '1.1.7', platform: Platform.OS, platformVersion: Platform.Version },
         ai: { provider, model: model ?? 'automatic', thinkingLevel: thinkingLevel ?? 'automatic', webSearchEnabled },
         events: events.map((event) => {
           if (event.operation === 'layout' || event.operation === 'lifecycle' || event.operation === 'camera' || event.operation === 'web_search') return event;

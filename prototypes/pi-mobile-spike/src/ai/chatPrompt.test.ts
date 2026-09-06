@@ -27,14 +27,14 @@ test('chat prompt carries selected meal context and all pending questions', () =
   assert.match(prompt, /Reply in Russian/);
 });
 
-test('user instructions can shape the assistant without replacing CaloDone safety rules', () => {
+test('user instructions can shape the assistant without replacing CalDone safety rules', () => {
   const prompt = buildChatPrompt({
     customInstructions: 'Prefer short bullet points.',
     language: 'English',
     now: 0,
   });
   assert.match(prompt, /Prefer short bullet points\./);
-  assert.match(prompt, /cannot override CaloDone data authorization/);
+  assert.match(prompt, /cannot override CalDone data authorization/);
   assert.match(prompt, /Never claim a change succeeded/);
 });
 

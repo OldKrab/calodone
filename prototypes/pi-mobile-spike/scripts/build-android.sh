@@ -8,5 +8,5 @@ npx expo prebuild --platform android --no-install
 ./android/gradlew -p android :app:assembleRelease \
   -PreactNativeArchitectures=arm64-v8a --console=plain --max-workers=2
 mkdir -p ../../artifacts
-cp android/app/build/outputs/apk/release/app-release.apk "../../artifacts/calodone-${version}-arm64.apk"
-printf '%s\n' "Built artifacts/calodone-${version}-arm64.apk (CaloDone update)"
+cp android/app/build/outputs/apk/release/app-release.apk "../../artifacts/caldone-${version}-arm64.apk"
+printf '%s\n' "Built artifacts/caldone-${version}-arm64.apk (CalDone update)"
