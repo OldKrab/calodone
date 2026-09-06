@@ -1,3 +1,4 @@
+import { MealRequestDiagnostics } from './mealRequestTrace.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { zstdDecompressSync } from 'node:zlib';
@@ -11,6 +12,7 @@ import { OPENAI_CODEX_MODELS } from '@earendil-works/pi-ai/providers/openai-code
 // services, credential lookup and HTTP; no real credentials or network are used.
 const token='test.'+btoa(JSON.stringify({'https://api.openai.com/auth':{chatgpt_account_id:'fixture'}}))+'.test';
 const fixture:any={model:{...Object.values(OPENAI_CODEX_MODELS)[0],reasoning:false},search:true,enabled:true,events:[]};
+fixture.diagnostics=new MealRequestDiagnostics({read:()=>fixture.trace,write:value=>{fixture.trace=value}});
 fixture.stream=(model:any,context:any,options:any)=>streamSimple(model,context,{...options,apiKey:token});
 fixture.fetch=async(_url:any,init:any)=>{
   fixture.payload=JSON.parse(typeof init.body === 'string' ? init.body : zstdDecompressSync(init.body).toString());
@@ -25,6 +27,7 @@ const sources:Record<string,string>={
   '@earendil-works/pi-agent-core':'export class Agent {}',
   'react-native':'export const AppState={currentState:"active"};',
   'expo/fetch':'export const fetch=(...args)=>globalThis.__mealProvider.fetch(...args);',
+  '../services/mealRequestTraceStore':'export const mealRequestDiagnostics=globalThis.__mealProvider.diagnostics;',
   'expo-file-system':'export class File {}',
   'expo-secure-store':`export const getItemAsync=async key=>key.includes('web-search')?String(globalThis.__mealProvider.enabled):null;`,
   './mobileRuntime':'export const installPiMobileRuntime=()=>{};',
@@ -41,7 +44,7 @@ registerHooks({resolve(specifier,context,next){
   }
   return next(specifier,context);
 }});
-const {refineMealAnalysis}=await import('./piClient.ts');
+const {refineMealAnalysis,analyzeMeal}=await import('./piClient.ts');
 const input={mealId:'meal',photos:[],previousJson:'{}',question:'How much?',answer:'Google it, I drank the whole bottle',language:'English' as const};
 test('real meal request forces search through Pi and returns provider evidence',async()=>{
   const result=await refineMealAnalysis(input);
@@ -61,4 +64,24 @@ test('disabled search remains disabled and is reported as unavailable',async()=>
   assert.equal(result.research.status,'unavailable');
   assert.equal(fixture.payload.tools,undefined);
   assert.equal(fixture.payload.tool_choice,'auto');
+});
+
+test('test capture observes the real mobile Codex wire payload and parsed answer', async () => {
+  fixture.enabled = true;
+  fixture.search = false;
+  fixture.model = { ...Object.values(OPENAI_CODEX_MODELS).find(model => model.id === 'gpt-5.6-terra'), reasoning: false };
+  fixture.diagnostics.arm();
+  // React Native has no Node zlib; exercise Pi's actual uncompressed mobile path.
+  const getBuiltinModule = process.getBuiltinModule;
+  process.getBuiltinModule = ((name: string) => name === 'node:zlib' ? undefined : getBuiltinModule(name)) as typeof getBuiltinModule;
+  try {
+    const result = await analyzeMeal({ mealId: 'photo-test', photos: [{ base64: 'aW1hZ2U=', mimeType: 'image/jpeg' }], language: 'Russian' });
+    assert.equal(fixture.trace.state, 'complete');
+    assert.equal(fixture.trace.requests[0].body.model, fixture.payload.model);
+    assert.deepEqual(fixture.trace.requests[0].body.input, fixture.payload.input);
+    assert.ok(JSON.stringify(fixture.trace.requests[0].body.input).includes('data:image/jpeg;base64,aW1hZ2U='));
+    assert.equal(fixture.trace.responses[0].text, result.text);
+    assert.equal(fixture.trace.responses[0].responseId, 'resp-test');
+    assert.equal(JSON.stringify(fixture.trace).includes(token), false);
+  } finally { process.getBuiltinModule = getBuiltinModule; }
 });

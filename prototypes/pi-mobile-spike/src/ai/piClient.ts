@@ -1,3 +1,5 @@
+import { mealRequestDiagnostics } from '../services/mealRequestTraceStore';
+import type { MealRequestCapture } from './mealRequestTrace';
 import { trackedSearchFetch, withHostedSearch } from './hostedSearch';
 import { restoreChatMealPhotos } from './chatMealPhotos';
 import { acceptMealResearch, MealResearchError } from './mealResearchResult';
@@ -444,17 +446,20 @@ async function completeMealRequest(
   options: ModelsSimpleStreamOptions,
   onActivity?: (activity: MealModelActivity) => void,
   requireSearch = false,
+  capture?: MealRequestCapture,
 ): Promise<AssistantMessage & { research: MealResearch }> {
   return retryConnection(() => requestWithDeadline(async signal => {
     let answerStarted = false;
-    const tracked = trackedSearchFetch(expoFetch as typeof globalThis.fetch, activity => {
+    const baseFetch = options.fetch ?? expoFetch as typeof globalThis.fetch;
+    const requestFetch = capture ? capture.wrapFetch(baseFetch) : baseFetch;
+    const tracked = trackedSearchFetch(requestFetch, activity => {
       if (!signal.aborted && !answerStarted && activity.status === 'active') onActivity?.('web_search');
     });
     const stream = models.streamSimple(model, context, {
       ...options,
       signal,
       onPayload: options.onPayload ? payload => withHostedSearch(payload, requireSearch) : undefined,
-      fetch: options.onPayload ? tracked.fetch : options.fetch,
+      fetch: options.onPayload ? tracked.fetch : requestFetch,
     });
     for await (const event of stream) {
       if (signal.aborted) throw new Error('Request cancelled');
@@ -465,6 +470,7 @@ async function completeMealRequest(
       }
     }
     const result = await stream.result();
+    capture?.response({ text: contentText(result.content), responseId: result.responseId, stopReason: result.stopReason, error: result.errorMessage });
     if (result.stopReason === 'error' || result.stopReason === 'aborted') throw new Error(result.errorMessage ?? 'Meal request failed');
     const research: MealResearch = options.onPayload ? await tracked.result() : {status:'unavailable',sources:[]};
     acceptMealResearch(research, requireSearch);
@@ -481,47 +487,57 @@ export async function analyzeMeal(input: {
   mealId: string;
   onActivity?: (activity: MealModelActivity) => void;
 }): Promise<{ model: string; text: string; research: MealResearch }> {
-  const content = mealInputContent(input);
-  if (input.assistantInterpretation) content.push({type:'text',text:JSON.stringify({assistantInterpretation:input.assistantInterpretation})});
-  const model = input.photos.length > 0 ? await imageModel() : await textModel();
-  const requestOptions = await modelRequestOptions(model);
-  const startedAt = Date.now();
-  await appendDiagnosticEvent({ id: `${startedAt.toString(36)}-analysis-start`, createdAt: startedAt, operation: 'analyze', phase: 'started', mealId: input.mealId, appState: AppState.currentState, provider: model.provider, model: model.id, api: model.api, promptVersion: MEAL_ANALYSIS_PROMPT_VERSION, webSearchEnabled: await getWebSearchEnabled(model.provider), durationMs: 0 });
-  let response: AssistantMessage & { research: MealResearch };
+  // Reserve before awaiting model/auth selection so a second meal cannot take the capture.
+  let capture: MealRequestCapture | undefined;
+  try { capture = mealRequestDiagnostics.begin({ mealId: input.mealId, sourcePhotos: input.photos, note: input.note, promptVersion: MEAL_ANALYSIS_PROMPT_VERSION }); } catch { /* Optional diagnostics must not block analysis. */ }
   try {
-    response = await completeMealRequest(
-      model,
-      {
-        systemPrompt: buildMealAnalysisPrompt(input.language),
-        messages: [
-          {
-            role: 'user',
-            content,
-            timestamp: Date.now(),
-          },
-        ],
-      },
-      {
-        ...requestOptions,
-        // React Native's built-in fetch historically lacked a streaming body.
-        // Expo's implementation supplies the ReadableStream contract Pi consumes.
-        fetch: expoFetch as typeof globalThis.fetch,
-        transport: 'sse',
-      },
-      input.onActivity,
-      input.requireSearch ?? explicitlyRequestsSearch(input.note ?? ''),
-    );
-    await recordAiDiagnostic({ operation: 'analyze', mealId: input.mealId, model, startedAt, response, research: response.research });
+    const content = mealInputContent(input);
+    if (input.assistantInterpretation) content.push({type:'text',text:JSON.stringify({assistantInterpretation:input.assistantInterpretation})});
+    const model = input.photos.length > 0 ? await imageModel() : await textModel();
+    const requestOptions = await modelRequestOptions(model);
+    const startedAt = Date.now();
+    await appendDiagnosticEvent({ id: `${startedAt.toString(36)}-analysis-start`, createdAt: startedAt, operation: 'analyze', phase: 'started', mealId: input.mealId, appState: AppState.currentState, provider: model.provider, model: model.id, api: model.api, promptVersion: MEAL_ANALYSIS_PROMPT_VERSION, webSearchEnabled: await getWebSearchEnabled(model.provider), durationMs: 0 });
+    let response: AssistantMessage & { research: MealResearch };
+    try {
+      response = await completeMealRequest(
+        model,
+        {
+          systemPrompt: buildMealAnalysisPrompt(input.language),
+          messages: [
+            {
+              role: 'user',
+              content,
+              timestamp: Date.now(),
+            },
+          ],
+        },
+        {
+          ...requestOptions,
+          // React Native's built-in fetch historically lacked a streaming body.
+          // Expo's implementation supplies the ReadableStream contract Pi consumes.
+          fetch: expoFetch as typeof globalThis.fetch,
+          transport: 'sse',
+        },
+        input.onActivity,
+        input.requireSearch ?? explicitlyRequestsSearch(input.note ?? ''),
+        capture,
+      );
+      await recordAiDiagnostic({ operation: 'analyze', mealId: input.mealId, model, startedAt, response, research: response.research });
+    } catch (error) {
+      await recordAiDiagnostic({ operation: 'analyze', mealId: input.mealId, model, startedAt, error });
+      throw error;
+    }
+
+    if (response.stopReason === 'error') {
+      throw new Error(response.errorMessage ?? 'Unknown Pi request error');
+    }
+
+    capture?.finish();
+    return { model: model.id, text: contentText(response.content), research: response.research };
   } catch (error) {
-    await recordAiDiagnostic({ operation: 'analyze', mealId: input.mealId, model, startedAt, error });
+    capture?.finish(error);
     throw error;
   }
-
-  if (response.stopReason === 'error') {
-    throw new Error(response.errorMessage ?? 'Unknown Pi request error');
-  }
-
-  return { model: model.id, text: contentText(response.content), research: response.research };
 }
 
 export async function refineMealAnalysis(input: {
