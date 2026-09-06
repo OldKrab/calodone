@@ -5,7 +5,7 @@ import { normalizeQuestionChoices, type QuestionChoices } from '../../domain/que
 type ToolCall = Extract<Extract<AgentMessage, { role: 'assistant' }>['content'][number], { type: 'toolCall' }>;
 export type ToolStatus = 'preparing' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type ToolExecution = { status: ToolStatus; arguments: Record<string, unknown> };
-export type ActivityTool = { call: ToolCall; status: ToolStatus };
+export type ActivityTool = { call: ToolCall; status: ToolStatus; error?: string };
 export type ActivityFeedItem =
   | { kind: 'message'; key: string; message: AgentMessage; activeQuestions?: string[] }
   | { kind: 'question'; key: string; questions: QuestionChoices[]; active: boolean }
@@ -77,7 +77,8 @@ export function buildActivityFeed(input: {
         }
         const execution = input.toolExecutions?.[block.id];
         const status = execution?.status === 'cancelled' ? 'cancelled' : result ? (result.isError ? 'failed' : 'completed') : execution?.status ?? (input.busy && index > lastUser ? 'preparing' : 'cancelled');
-        group.tools.push({ call: { ...block, arguments: execution?.arguments ?? (status === 'preparing' ? {} : block.arguments) }, status });
+        const error = result?.isError ? result.content?.filter(block => block.type === 'text').map(block => block.text).join('\n').slice(0, 1000) : undefined;
+        group.tools.push({ ...(error ? { error } : {}), call: { ...block, arguments: execution?.arguments ?? (status === 'preparing' ? {} : block.arguments) }, status });
       }
     }
   }

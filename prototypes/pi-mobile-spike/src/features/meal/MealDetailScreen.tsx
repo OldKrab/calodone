@@ -1,3 +1,4 @@
+import { MealProgress } from '../../components/MealProgress';
 import { QuestionAnswers } from '../../components/QuestionAnswers';
 import { mealQuestionChoices } from '../../domain/mealQuestions';
 import { Ionicons } from '@expo/vector-icons';
@@ -5,7 +6,6 @@ import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   Image,
   Modal,
   Pressable,
@@ -53,6 +53,7 @@ export function MealDetailScreen(props: {
   const [draft, setDraft] = useState<MealAnalysis | undefined>(props.meal.analysis);
   const [time, setTime] = useState(editableTime(props.meal.capturedAt));
   const [answering, setAnswering] = useState(false);
+  const working = answering || props.answerSubmitting || Boolean(props.activity) || props.meal.status === 'queued' || props.meal.status === 'analyzing';
 
   useEffect(() => {
     if (editing) return;
@@ -107,8 +108,7 @@ export function MealDetailScreen(props: {
         <Header title={t('mealDetails')} onBack={props.onBack} actionLabel={props.meal.status === 'failed' ? t('delete') : undefined} onAction={confirmDelete} />
         <View style={styles.loading}>
           {props.meal.photos[0] && <Image source={{ uri: props.meal.photos[0].uri }} style={styles.pendingPhoto} />}
-          {props.meal.status !== 'failed' && <ActivityIndicator color={color.action} />}
-          <Text style={styles.loadingText}>{props.meal.status === 'failed' ? t('failed') : activityLabel(props.activity)}</Text>
+          {props.meal.status === 'failed' ? <Text style={styles.loadingText}>{t('failed')}</Text> : <MealProgress mealId={props.meal.id} stage={props.activity} />}
           <Text style={styles.pendingHelp}>{props.meal.status === 'failed' ? (locale === 'ru' ? 'Не удалось получить оценку. Вернитесь к дневнику, чтобы повторить анализ, или удалите запись.' : 'The estimate could not be completed. Return to your journal to retry, or delete this record.') : (locale === 'ru' ? 'Можно вернуться к дневнику. Результат появится в записи.' : 'You can return to your journal. The result will appear in this record.')}</Text>
           <PrimaryButton label={locale === 'ru' ? 'К дневнику' : 'Back to journal'} onPress={props.onBack} />
         </View>
@@ -133,9 +133,12 @@ export function MealDetailScreen(props: {
           style={styles.scroll}
         >
 
-        {(answering || props.answerSubmitting) && <Text accessibilityLiveRegion="polite" style={styles.clarificationActivity}>{activityLabel(props.activity)}</Text>}
+        {!editing && working && <MealProgress mealId={props.meal.id} stage={props.activity} previousEstimate />}
+        {!editing && !working && props.meal.status === 'needs_input' && <Text style={styles.clarificationActivity}>{locale === 'ru' ? 'Предварительная оценка · ожидает уточнения' : 'Provisional estimate · awaiting clarification'}</Text>}
+        {!editing && !working && props.meal.status === 'failed' && <Text style={styles.error}>{locale === 'ru' ? 'Пересчёт не завершён. Ниже — предыдущая оценка.' : 'Update failed. The previous estimate is shown below.'}</Text>}
         {!editing && mealQuestions(draft.clarification).length > 0 && (
-          <View style={styles.clarification}>
+          // Keep answer draft mounted so a failed request restores the typed answer.
+          <View style={[styles.clarification, working && { display: 'none' }]}>
             <Text style={styles.clarificationLabel}>{t('clarificationTitle')}</Text>
             <QuestionAnswers key={`${props.meal.id}-${JSON.stringify(draft.clarification)}`}
               questions={mealQuestionChoices(draft.clarification)} disabled={answering || props.answerSubmitting}
@@ -180,16 +183,6 @@ export function MealDetailScreen(props: {
       </ScreenReveal>
     </KeyboardSafeArea>
   );
-}
-
-function activityLabel(stage?: MealActivityStage): string {
-  if (stage === 'reading_photos') return t('readingMealPhotos');
-  if (stage === 'reviewing_meal') return t('reviewingMeal');
-  if (stage === 'thinking') return t('assistantWorking');
-  if (stage === 'web_search') return t('toolWebSearch');
-  if (stage === 'writing_result') return t('writingMealResult');
-  if (stage === 'saving_result') return t('savingMealResult');
-  return t('analyzing');
 }
 
 function Header(props: {
